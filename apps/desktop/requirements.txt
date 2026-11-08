@@ -1,0 +1,2 @@
+# apps/desktop/requirements.txt
+# Desktop application dependencies
