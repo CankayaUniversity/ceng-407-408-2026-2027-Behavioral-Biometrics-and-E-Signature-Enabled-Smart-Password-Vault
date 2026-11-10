@@ -19,3 +19,6 @@ __pycache__/
 
 # Private behavioral data
 packages/behavioral_ai/**/data/
+# Frontend
+node_modules/
+dist/
