@@ -55,3 +55,40 @@ not be committed. Virtual environments must also remain outside Git.
 
 The original scripts remain together under `legacy/` to preserve their
 relative data paths. Shared feature pipeline refactoring belongs to AI-02.
+
+## Shared Feature Extraction
+
+Saved-session extraction and future live inference use the same
+functions from `packages.behavioral_ai.features`.
+
+```python
+from packages.behavioral_ai.features import (
+    extract_window,
+    feature_vector,
+)
+
+features = extract_window(samples)
+
+if features is not None:
+    model_input = feature_vector(features)
+```
+
+Each window contains 100 samples. Batch extraction uses non-overlapping
+windows and discards an incomplete final window. Process each session
+separately.
+
+The first transition in each window is excluded. Missing transitions
+are excluded rather than replaced with zero. Both down-down and flight
+transition coverage must be at least 70%.
+
+The model vector contains 13 features in the order defined by
+`FEATURE_NAMES`. Counts, coverage, and session identifiers are not
+model inputs.
+
+Configuration and feature version are defined in `features/config.py`.
+
+Run the tests from the repository root:
+
+```bash
+python -m pytest packages/behavioral_ai/tests -q
+```
