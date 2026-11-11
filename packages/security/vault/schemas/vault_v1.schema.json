@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Encrypted Vault",
+  "description": "Proposed encrypted vault storage format v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format_version", "vault_id", "kdf", "key_envelope", "records"],
+  "properties": {
+    "format_version": {"type": "integer", "const": 1},
+    "vault_id": {"type": "string", "format": "uuid"},
+    "kdf": {"$ref": "#/$defs/kdf"},
+    "key_envelope": {"$ref": "#/$defs/keyEnvelope"},
+    "records": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/encryptedRecord"}
+    }
+  },
+  "$defs": {
+    "encodedBytes": {
+      "type": "string",
+      "minLength": 1,
+      "contentEncoding": "base64"
+    },
+    "kdf": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "salt", "parameters"],
+      "properties": {
+        "algorithm": {"type": "string", "const": "argon2id"},
+        "salt": {"$ref": "#/$defs/encodedBytes"},
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["memory_cost_kib", "time_cost", "parallelism"],
+          "properties": {
+            "memory_cost_kib": {"type": "integer", "minimum": 1},
+            "time_cost": {"type": "integer", "minimum": 1},
+            "parallelism": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    },
+    "keyEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "nonce", "wrapped_dek"],
+      "properties": {
+        "algorithm": {"type": "string", "const": "AES-256-GCM"},
+        "nonce": {"$ref": "#/$defs/encodedBytes"},
+        "wrapped_dek": {"$ref": "#/$defs/encodedBytes"}
+      }
+    },
+    "encryptedRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_id", "version", "nonce", "ciphertext"],
+      "properties": {
+        "record_id": {"type": "string", "format": "uuid"},
+        "version": {"type": "integer", "const": 1},
+        "nonce": {"$ref": "#/$defs/encodedBytes"},
+        "ciphertext": {"$ref": "#/$defs/encodedBytes"}
+      }
+    }
+  }
+}
