@@ -1,1 +1,13 @@
-# pyproject.toml
+[project]
+name = "behavioral-auth-system"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "argon2-cffi",
+    "cryptography",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
