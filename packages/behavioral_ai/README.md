@@ -37,7 +37,7 @@ not the typed text or key identities.
 ## Extract Features
 
 ```bash
-.venv/bin/python packages/behavioral_ai/legacy/extract_features.py
+.venv/bin/python -m packages.behavioral_ai.legacy.extract_features
 ```
 
 Output: `legacy/data/features.csv`.

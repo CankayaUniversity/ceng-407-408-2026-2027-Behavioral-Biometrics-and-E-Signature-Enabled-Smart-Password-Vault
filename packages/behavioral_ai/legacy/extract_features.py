@@ -1,5 +1,7 @@
 import csv
 import json
+import os
+import tempfile
 from pathlib import Path
 
 from packages.behavioral_ai.features import (
@@ -95,18 +97,29 @@ def main():
     try:
         OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-        with OUTPUT_FILE.open(
-            "w",
-            encoding="utf-8",
-            newline="",
-        ) as file:
-            writer = csv.DictWriter(
-                file,
-                fieldnames=list(rows[0].keys()),
-            )
+        temporary_path = None
+        try:
+            # Keep the old CSV intact until the complete replacement is ready.
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="",
+                dir=OUTPUT_FILE.parent,
+                prefix=f".{OUTPUT_FILE.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as file:
+                temporary_path = Path(file.name)
+                writer = csv.DictWriter(file, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
+                file.flush()
+                os.fsync(file.fileno())
 
-            writer.writeheader()
-            writer.writerows(rows)
+            os.replace(temporary_path, OUTPUT_FILE)
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
 
     except OSError as error:
         print(f"Could not save CSV: {error}")
