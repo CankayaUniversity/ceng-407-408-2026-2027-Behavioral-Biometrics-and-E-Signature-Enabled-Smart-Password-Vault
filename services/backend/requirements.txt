@@ -1,2 +1,6 @@
 # services/backend/requirements.txt
 # Backend service dependencies
+fastapi
+uvicorn
+sqlalchemy
+python-dotenv
