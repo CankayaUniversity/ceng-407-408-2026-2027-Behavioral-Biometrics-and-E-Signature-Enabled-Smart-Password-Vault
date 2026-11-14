@@ -22,3 +22,8 @@ packages/behavioral_ai/**/data/
 # Frontend
 node_modules/
 dist/
+# Local backend database
+/backend.db
+/backend.db-journal
+/backend.db-wal
+/backend.db-shm
