@@ -140,6 +140,88 @@ def main():
         },
     }
 
+    error_descriptions = {
+        "400": "INVALID_CHALLENGE: the referenced challenge is unknown.",
+        "401": (
+            "UNAUTHORIZED: missing, invalid, or expired credentials."
+        ),
+        "403": (
+            "FORBIDDEN: the authenticated caller lacks permission, "
+            "ownership, or an allowed session state."
+        ),
+        "404": (
+            "NOT_FOUND: an authorized resource lookup finds no resource."
+        ),
+        "422": (
+            "VALIDATION_ERROR: invalid fields, types, required values, "
+            "or cross-field constraints."
+        ),
+        "429": (
+            "RATE_LIMITED: request or authentication attempt limit exceeded."
+        ),
+        "500": "INTERNAL_ERROR: unexpected server failure.",
+    }
+
+    for path, path_item in paths.items():
+        statuses = {"401", "403", "422", "429", "500"}
+
+        if path == "/v1/auth/verify":
+            statuses.update({"400", "409"})
+
+        if path == "/v1/devices/pair":
+            statuses.update({"404", "409"})
+
+        if path.startswith("/v1/sessions/"):
+            statuses.add("404")
+
+        for endpoint in path_item.values():
+            for status in sorted(statuses):
+                if status == "409":
+                    description = (
+                        "DEVICE_ALREADY_REGISTERED: pairing conflicts "
+                        "with an existing device registration."
+                        if path == "/v1/devices/pair"
+                        else "REPLAY_DETECTED: challenge already finalized "
+                        "or atomic consumption loses a race."
+                    )
+                else:
+                    description = error_descriptions[status]
+
+                if status == "401" and path == "/v1/auth/verify":
+                    description += (
+                        " Device verification failures: "
+                        "EXPIRED_CHALLENGE (stored challenge expired), "
+                        "INVALID_SIGNATURE (signature verification failed), "
+                        "DEVICE_MISMATCH (unexpected device), "
+                        "REQUEST_MISMATCH (signed context differs from "
+                        "the stored challenge), or "
+                        "VERIFICATION_FAILED (signed verified=false). "
+                        "Detailed conditions and disclosure rules "
+                        "are defined in auth_api.md."
+                    )
+
+                response = {
+                    "description": description,
+                    "content": {
+                        "application/json": {
+                            "schema": schema_ref(ErrorResponse),
+                        },
+                    },
+                }
+
+                if status == "401":
+                    response["headers"] = {
+                        "WWW-Authenticate": {
+                            "description": (
+                                "Required authentication challenge; "
+                                "scheme and values pending team review."
+                            ),
+                            "schema": {"type": "string"},
+                        },
+                    }
+
+                endpoint["responses"][status] = response
+
     for path, path_item in paths.items():
         if "{session_id}" in path:
             path_item["parameters"] = [
@@ -164,7 +246,13 @@ def main():
                 "Draft BE-03 contract. Endpoints are not implemented "
                 "by this specification. Authentication credentials, "
                 "pairing bootstrap, and policies require team review. "
-                "Missing security declarations do not imply public access."
+                "Missing security declarations do not imply public access. "
+                "Timestamp schemas require explicit timezones; backend "
+                "responses must be normalized to UTC. "
+                "Device signatures cover version, challenge_id, device_id, "
+                "and payload. Session binding is resolved from the "
+                "authoritative stored challenge. See auth_api.md "
+                "and device_protocol.md."
             ),
         },
         "paths": paths,

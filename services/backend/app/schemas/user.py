@@ -1,6 +1,4 @@
-from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class UserCreateRequest(BaseModel):
@@ -18,4 +16,4 @@ class UserCreateResponse(BaseModel):
     user_id: str
     display_name: str
     enrollment_status: str
-    created_at: datetime
+    created_at: AwareDatetime

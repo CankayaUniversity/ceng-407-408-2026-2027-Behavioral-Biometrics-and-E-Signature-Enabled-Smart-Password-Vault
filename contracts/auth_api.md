@@ -52,26 +52,51 @@ The message is intended for display and must not expose submitted secrets.
 
 ## Proposed Error Statuses
 
-| HTTP status | Code |
-|---|---|
-| 422 | VALIDATION_ERROR |
-| 401 | UNAUTHORIZED |
-| 403 | FORBIDDEN |
-| 404 | NOT_FOUND |
-| 400 | INVALID_CHALLENGE |
-| 401 | EXPIRED_CHALLENGE |
-| 409 | REPLAY_DETECTED |
-| 401 | INVALID_SIGNATURE |
-| 401 | DEVICE_MISMATCH |
-| 401 | REQUEST_MISMATCH |
-| 401 | VERIFICATION_FAILED |
-| 429 | RATE_LIMITED |
-| 500 | INTERNAL_ERROR |
+| HTTP | Code | Condition |
+|---|---|---|
+| 400 | INVALID_CHALLENGE | Structurally valid verification request references an unknown challenge |
+| 401 | UNAUTHORIZED | Required authentication credentials are missing, invalid, or expired |
+| 401 | EXPIRED_CHALLENGE | The stored challenge has expired according to the backend clock |
+| 401 | INVALID_SIGNATURE | Device signature verification fails |
+| 401 | DEVICE_MISMATCH | Response device does not match the challenge's expected device |
+| 401 | REQUEST_MISMATCH | Signed version, request, user, purpose, or nonce does not match the stored challenge |
+| 401 | VERIFICATION_FAILED | A valid signed response reports verified=false |
+| 403 | FORBIDDEN | Authenticated caller lacks permission, ownership, or an allowed session state |
+| 404 | NOT_FOUND | An authorized resource lookup finds no matching resource |
+| 409 | REPLAY_DETECTED | Challenge has already been finalized or atomic consumption loses a race |
+| 409 | DEVICE_ALREADY_REGISTERED | Pairing conflicts with an existing device registration |
+| 422 | VALIDATION_ERROR | Request fields, types, required values, or cross-field constraints are invalid |
+| 429 | RATE_LIMITED | Request or authentication attempt limit is exceeded |
+| 500 | INTERNAL_ERROR | Unexpected server failure; internal details are not returned |
 
-These mappings require team review.
-Detailed authentication errors must not disclose unauthorized resource
-information. Internal exceptions and submitted authentication payloads
-must not be returned to clients.
+Malformed challenge identifiers rejected by request schema validation
+produce 422, not 400.
+
+A 401 response must include an appropriate WWW-Authenticate challenge.
+The authentication scheme and challenge values require team agreement.
+
+Authenticate and authorize callers before disclosing protected resource
+existence or detailed authentication failure reasons.
+Detailed device error codes are exposed only to the appropriately
+authorized authentication flow.
+
+If multiple checks fail, report the first failure in the agreed
+verification sequence; do not disclose later validation results.
+
+These mappings are proposed contract behavior and require team review.
+They do not describe currently implemented authentication endpoints.
+
+## Timestamp Contract
+
+Every non-null timestamp must contain an explicit timezone.
+Timezone-naive timestamps are rejected by the API schemas.
+
+Backend response timestamps must be serialized in UTC.
+AwareDatetime enforces timezone presence, but does not itself normalize
+offsets to UTC; response construction must perform that normalization.
+
+This applies to user creation, challenge expiration, session creation,
+session expiration, revocation, and reauthentication timestamps.
 
 ## Pending Decisions
 
@@ -239,3 +264,78 @@ python -m pytest tests/unit/test_auth_schemas.py tests/unit/test_auth_examples.p
 Tests cover schema validation, static response examples, and resolution
 of internal OpenAPI schema references. They do not verify implemented
 authentication endpoints or full OpenAPI standards compliance.
+## Signed Response and Session Binding
+
+This section clarifies the proposed verification contract.
+It does not implement backend signature verification.
+
+### Signature Scope
+
+The signature covers the complete response envelope except signature:
+
+{
+  "version": 1,
+  "challenge_id": "...",
+  "device_id": "...",
+  "payload": {
+    "request_id": "...",
+    "user_id": "...",
+    "purpose": "login",
+    "nonce": "...",
+    "verified": true
+  }
+}
+
+Signing only the nested payload is not compliant with this contract.
+
+The signed bytes must follow device_protocol.md:
+
+b"DEVICE_AUTH_V1\x00" + canonical_json_bytes
+
+Canonical JSON uses sorted keys, compact separators, UTF-8 encoding,
+and Python's default ASCII escaping behavior.
+
+### Authoritative Backend Binding
+
+Before issuing a challenge, the backend must persist its association with:
+- challenge_id
+- protocol version
+- device_id
+- user_id
+- request_id
+- session_id
+- purpose
+- nonce or its verification representation
+- expiration and consumption state
+
+session_id is not currently a field in the signed device response.
+Its binding is indirect, through the authoritative stored challenge.
+This storage requirement extends the current BE-02 challenge model.
+
+### Verification Requirements
+
+1. Validate the response structure.
+2. Use challenge_id only to locate the authoritative stored challenge;
+   locating a record does not authorize an operation.
+3. Load the expected device and public key from trusted backend records,
+   never from a public key supplied with the verification request.
+4. Verify the signature over the complete response envelope.
+5. Match version, challenge_id, device_id, request_id, user_id, purpose,
+   and nonce against the stored challenge.
+6. Resolve session_id from the stored challenge and validate session
+   ownership, intended operation, permitted state, and expiration.
+7. Enforce device trust/revocation and challenge expiration.
+8. Atomically finalize the challenge according to the agreed consumption
+   policy; authentication must not succeed if consumption fails.
+9. Grant authentication only for a signed verified=true result and
+   successful completion of all required policy checks.
+
+No session may be selected or replaced using an unbound client field.
+A client-provided request_id must not override the stored session binding.
+
+Changing challenge_id or device_id changes the signed message.
+Replacing the stored association or using an unrelated session must
+also be rejected by backend context checks.
+
+Signature validity alone does not authorize a session transition.
+The detailed failed-attempt consumption policy remains pending review.

@@ -4,7 +4,10 @@ info:
   version: 0.1.0
   description: Draft BE-03 contract. Endpoints are not implemented by this specification.
     Authentication credentials, pairing bootstrap, and policies require team review.
-    Missing security declarations do not imply public access.
+    Missing security declarations do not imply public access. Timestamp schemas require
+    explicit timezones; backend responses must be normalized to UTC. Device signatures
+    cover version, challenge_id, device_id, and payload. Session binding is resolved
+    from the authoritative stored challenge. See auth_api.md and device_protocol.md.
 paths:
   /v1/users:
     post:
@@ -21,6 +24,44 @@ paths:
         default:
           description: Error response. See auth_api.md for proposed HTTP status and
             error code mappings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
           content:
             application/json:
               schema:
@@ -50,6 +91,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 'NOT_FOUND: an authorized resource lookup finds no resource.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'DEVICE_ALREADY_REGISTERED: pairing conflicts with an existing
+            device registration.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
       requestBody:
         required: true
         content:
@@ -71,6 +163,44 @@ paths:
         default:
           description: Error response. See auth_api.md for proposed HTTP status and
             error code mappings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
           content:
             application/json:
               schema:
@@ -100,6 +230,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: 'INVALID_CHALLENGE: the referenced challenge is unknown.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials. Device
+            verification failures: EXPIRED_CHALLENGE (stored challenge expired), INVALID_SIGNATURE
+            (signature verification failed), DEVICE_MISMATCH (unexpected device),
+            REQUEST_MISMATCH (signed context differs from the stored challenge), or
+            VERIFICATION_FAILED (signed verified=false). Detailed conditions and disclosure
+            rules are defined in auth_api.md.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'REPLAY_DETECTED: challenge already finalized or atomic consumption
+            loses a race.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
       requestBody:
         required: true
         content:
@@ -121,6 +307,50 @@ paths:
         default:
           description: Error response. See auth_api.md for proposed HTTP status and
             error code mappings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 'NOT_FOUND: an authorized resource lookup finds no resource.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
           content:
             application/json:
               schema:
@@ -148,6 +378,50 @@ paths:
         default:
           description: Error response. See auth_api.md for proposed HTTP status and
             error code mappings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 'NOT_FOUND: an authorized resource lookup finds no resource.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
           content:
             application/json:
               schema:

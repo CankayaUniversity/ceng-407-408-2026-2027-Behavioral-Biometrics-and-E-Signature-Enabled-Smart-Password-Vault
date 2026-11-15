@@ -147,3 +147,54 @@ def test_challenge_requires_timezone(expires_at, accepted):
     else:
         with pytest.raises(ValidationError):
             AuthChallengeResponse.model_validate(data)
+
+@pytest.mark.parametrize(
+    "model_name, field",
+    [
+        ("user", "created_at"),
+        ("session", "created_at"),
+        ("session", "expires_at"),
+        ("session", "revoked_at"),
+        ("session", "last_reauth_at"),
+    ],
+)
+@pytest.mark.parametrize(
+    "timestamp, accepted",
+    [
+        ("2026-11-15T12:00:00Z", True),
+        ("2026-11-15T15:00:00+03:00", True),
+        ("2026-11-15T12:00:00", False),
+    ],
+)
+def test_response_timestamps_require_timezone(
+    model_name, field, timestamp, accepted
+):
+    from services.backend.app.schemas.session import SessionResponse
+    from services.backend.app.schemas.user import UserCreateResponse
+
+    if model_name == "user":
+        schema = UserCreateResponse
+        data = {
+            "user_id": "example-user",
+            "display_name": "Example User",
+            "enrollment_status": "PENDING",
+            "created_at": "2026-11-15T12:00:00Z",
+        }
+    else:
+        schema = SessionResponse
+        data = {
+            "session_id": "example-session",
+            "user_id": "example-user",
+            "state": "LOCKED",
+            "created_at": "2026-11-15T12:00:00Z",
+            "expires_at": "2026-11-15T13:00:00Z",
+        }
+
+    data[field] = timestamp
+
+    if accepted:
+        result = schema.model_validate(data)
+        assert getattr(result, field).tzinfo is not None
+    else:
+        with pytest.raises(ValidationError):
+            schema.model_validate(data)
