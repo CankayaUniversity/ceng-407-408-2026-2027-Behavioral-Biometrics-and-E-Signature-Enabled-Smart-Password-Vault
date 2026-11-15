@@ -1,2 +1,745 @@
-# contracts/auth.openapi.yaml
-# OpenAPI specification for authentication service
+openapi: 3.1.0
+info:
+  title: Authentication API
+  version: 0.1.0
+  description: Draft BE-03 contract. Endpoints are not implemented by this specification.
+    Authentication credentials, pairing bootstrap, and policies require team review.
+    Missing security declarations do not imply public access. Timestamp schemas require
+    explicit timezones; backend responses must be normalized to UTC. Device signatures
+    cover version, challenge_id, device_id, and payload. Session binding is resolved
+    from the authoritative stored challenge. See auth_api.md and device_protocol.md.
+paths:
+  /v1/users:
+    post:
+      summary: Create a user
+      description: Draft contract only; this endpoint is not implemented by the exporter.
+        Authorization and policy require team review.
+      responses:
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCreateResponse'
+        default:
+          description: Error response. See auth_api.md for proposed HTTP status and
+            error code mappings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateRequest'
+  /v1/devices/pair:
+    post:
+      summary: Pair a device through an authorized flow
+      description: Draft contract only; this endpoint is not implemented by the exporter.
+        Authorization and policy require team review.
+      responses:
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevicePairResponse'
+        default:
+          description: Error response. See auth_api.md for proposed HTTP status and
+            error code mappings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 'NOT_FOUND: an authorized resource lookup finds no resource.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'DEVICE_ALREADY_REGISTERED: pairing conflicts with an existing
+            device registration.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevicePairRequest'
+  /v1/auth/challenges:
+    post:
+      summary: Create an authentication challenge
+      description: Draft contract only; this endpoint is not implemented by the exporter.
+        Authorization and policy require team review.
+      responses:
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthChallengeCreateResponse'
+        default:
+          description: Error response. See auth_api.md for proposed HTTP status and
+            error code mappings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthChallengeCreateRequest'
+  /v1/auth/verify:
+    post:
+      summary: Submit a signed device response
+      description: Draft contract only; this endpoint is not implemented by the exporter.
+        Authorization and policy require team review.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthVerifyResponse'
+        default:
+          description: Error response. See auth_api.md for proposed HTTP status and
+            error code mappings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: 'INVALID_CHALLENGE: the referenced challenge is unknown.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials. Device
+            verification failures: EXPIRED_CHALLENGE (stored challenge expired), INVALID_SIGNATURE
+            (signature verification failed), DEVICE_MISMATCH (unexpected device),
+            REQUEST_MISMATCH (signed context differs from the stored challenge), or
+            VERIFICATION_FAILED (signed verified=false). Detailed conditions and disclosure
+            rules are defined in auth_api.md.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'REPLAY_DETECTED: challenge already finalized or atomic consumption
+            loses a race.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthVerifyRequest'
+  /v1/sessions/{session_id}:
+    get:
+      summary: Read an authorized session
+      description: Draft contract only; this endpoint is not implemented by the exporter.
+        Authorization and policy require team review.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        default:
+          description: Error response. See auth_api.md for proposed HTTP status and
+            error code mappings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 'NOT_FOUND: an authorized resource lookup finds no resource.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    parameters:
+    - name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 36
+  /v1/sessions/{session_id}/revoke:
+    post:
+      summary: Revoke an authorized session
+      description: Draft contract only; this endpoint is not implemented by the exporter.
+        Authorization and policy require team review.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        default:
+          description: Error response. See auth_api.md for proposed HTTP status and
+            error code mappings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            WWW-Authenticate:
+              description: Required authentication challenge; scheme and values pending
+                team review.
+              schema:
+                type: string
+        '403':
+          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
+            or an allowed session state.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 'NOT_FOUND: an authorized resource lookup finds no resource.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid fields, types, required values,
+            or cross-field constraints.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: unexpected server failure.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    parameters:
+    - name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 36
+components:
+  schemas:
+    UserCreateRequest:
+      additionalProperties: false
+      properties:
+        display_name:
+          maxLength: 100
+          minLength: 1
+          title: Display Name
+          type: string
+      required:
+      - display_name
+      title: UserCreateRequest
+      type: object
+    UserCreateResponse:
+      additionalProperties: false
+      properties:
+        user_id:
+          title: User Id
+          type: string
+        display_name:
+          title: Display Name
+          type: string
+        enrollment_status:
+          title: Enrollment Status
+          type: string
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+      required:
+      - user_id
+      - display_name
+      - enrollment_status
+      - created_at
+      title: UserCreateResponse
+      type: object
+    DevicePairRequest:
+      additionalProperties: false
+      properties:
+        user_id:
+          maxLength: 36
+          minLength: 1
+          title: User Id
+          type: string
+        device_id:
+          maxLength: 36
+          minLength: 1
+          title: Device Id
+          type: string
+        public_key:
+          minLength: 1
+          title: Public Key
+          type: string
+      required:
+      - user_id
+      - device_id
+      - public_key
+      title: DevicePairRequest
+      type: object
+    DevicePairResponse:
+      additionalProperties: false
+      properties:
+        device_id:
+          title: Device Id
+          type: string
+        user_id:
+          title: User Id
+          type: string
+        pairing_status:
+          title: Pairing Status
+          type: string
+      required:
+      - device_id
+      - user_id
+      - pairing_status
+      title: DevicePairResponse
+      type: object
+    AuthChallengeCreateRequest:
+      additionalProperties: false
+      properties:
+        user_id:
+          maxLength: 36
+          minLength: 1
+          title: User Id
+          type: string
+        device_id:
+          maxLength: 36
+          minLength: 1
+          title: Device Id
+          type: string
+        purpose:
+          enum:
+          - login
+          - reauthentication
+          title: Purpose
+          type: string
+        session_id:
+          anyOf:
+          - maxLength: 36
+            minLength: 1
+            type: string
+          - type: 'null'
+          default: null
+          title: Session Id
+      required:
+      - user_id
+      - device_id
+      - purpose
+      title: AuthChallengeCreateRequest
+      type: object
+    AuthChallengeResponse:
+      additionalProperties: false
+      properties:
+        version:
+          maximum: 1
+          minimum: 1
+          title: Version
+          type: integer
+        challenge_id:
+          minLength: 1
+          title: Challenge Id
+          type: string
+        request_id:
+          minLength: 1
+          title: Request Id
+          type: string
+        user_id:
+          minLength: 1
+          title: User Id
+          type: string
+        device_id:
+          minLength: 1
+          title: Device Id
+          type: string
+        purpose:
+          enum:
+          - login
+          - reauthentication
+          title: Purpose
+          type: string
+        nonce:
+          minLength: 1
+          title: Nonce
+          type: string
+        expires_at:
+          format: date-time
+          title: Expires At
+          type: string
+      required:
+      - version
+      - challenge_id
+      - request_id
+      - user_id
+      - device_id
+      - purpose
+      - nonce
+      - expires_at
+      title: AuthChallengeResponse
+      type: object
+    AuthChallengeCreateResponse:
+      additionalProperties: false
+      properties:
+        session_id:
+          title: Session Id
+          type: string
+        challenge:
+          $ref: '#/components/schemas/AuthChallengeResponse'
+      required:
+      - session_id
+      - challenge
+      title: AuthChallengeCreateResponse
+      type: object
+    DeviceResponsePayload:
+      additionalProperties: false
+      properties:
+        request_id:
+          minLength: 1
+          title: Request Id
+          type: string
+        user_id:
+          minLength: 1
+          title: User Id
+          type: string
+        purpose:
+          enum:
+          - login
+          - reauthentication
+          title: Purpose
+          type: string
+        nonce:
+          minLength: 1
+          title: Nonce
+          type: string
+        verified:
+          title: Verified
+          type: boolean
+      required:
+      - request_id
+      - user_id
+      - purpose
+      - nonce
+      - verified
+      title: DeviceResponsePayload
+      type: object
+    AuthVerifyRequest:
+      additionalProperties: false
+      properties:
+        version:
+          maximum: 1
+          minimum: 1
+          title: Version
+          type: integer
+        challenge_id:
+          minLength: 1
+          title: Challenge Id
+          type: string
+        device_id:
+          minLength: 1
+          title: Device Id
+          type: string
+        payload:
+          $ref: '#/components/schemas/DeviceResponsePayload'
+        signature:
+          minLength: 1
+          title: Signature
+          type: string
+      required:
+      - version
+      - challenge_id
+      - device_id
+      - payload
+      - signature
+      title: AuthVerifyRequest
+      type: object
+    SessionResponse:
+      additionalProperties: false
+      properties:
+        session_id:
+          title: Session Id
+          type: string
+        user_id:
+          title: User Id
+          type: string
+        state:
+          title: State
+          type: string
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        expires_at:
+          format: date-time
+          title: Expires At
+          type: string
+        revoked_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Revoked At
+        last_reauth_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Last Reauth At
+      required:
+      - session_id
+      - user_id
+      - state
+      - created_at
+      - expires_at
+      title: SessionResponse
+      type: object
+    AuthVerifyResponse:
+      additionalProperties: false
+      properties:
+        session:
+          $ref: '#/components/schemas/SessionResponse'
+      required:
+      - session
+      title: AuthVerifyResponse
+      type: object
+    ErrorDetail:
+      additionalProperties: false
+      properties:
+        code:
+          title: Code
+          type: string
+        message:
+          title: Message
+          type: string
+      required:
+      - code
+      - message
+      title: ErrorDetail
+      type: object
+    ErrorResponse:
+      additionalProperties: false
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+      required:
+      - error
+      title: ErrorResponse
+      type: object
