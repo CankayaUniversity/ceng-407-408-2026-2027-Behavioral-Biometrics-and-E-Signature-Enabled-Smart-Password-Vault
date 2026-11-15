@@ -11,4 +11,5 @@ dependencies = [
 dev = [
     "pytest",
     "httpx",
+    "PyYAML",
 ]
