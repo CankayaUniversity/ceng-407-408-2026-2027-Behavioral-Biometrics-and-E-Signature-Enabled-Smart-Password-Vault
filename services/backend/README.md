@@ -97,6 +97,13 @@ Device private keys, vault passwords, decryption keys, and real biometric
 templates must not be stored in these models.
 Security event metadata must be sanitized before insertion.
 
+All model timestamps accept timezone-aware datetimes, normalize them to
+UTC for storage, and return timezone-aware UTC values when loaded.
+Datetimes without a timezone are rejected. Nullable timestamps remain
+`None`. This uses the existing DATETIME columns without a schema change.
+Existing timezone-naive database values are interpreted as UTC; older
+values written in another timezone require a separate data correction.
+
 ## Database Tests
 
 ```powershell
@@ -104,4 +111,5 @@ python -m pytest tests/integration/test_database_models.py -v
 ```
 
 Tests use a temporary SQLite database and cover table creation,
-related records, foreign key enforcement, and duplicate user IDs.
+related records, foreign key enforcement, duplicate user IDs, UTC timestamp
+round trips, and rejection of timestamps without a timezone.

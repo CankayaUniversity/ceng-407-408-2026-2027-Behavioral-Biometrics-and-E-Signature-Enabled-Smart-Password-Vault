@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, JSON, String
+from sqlalchemy import ForeignKey, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database.base import Base
+from ..database.types import UTCDateTime
 
 
 class SecurityEvent(Base):
@@ -24,7 +25,7 @@ class SecurityEvent(Base):
     severity: Mapped[str] = mapped_column(String(30))
     source: Mapped[str] = mapped_column(String(50))
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         default=lambda: datetime.now(timezone.utc),
     )
     sanitized_metadata: Mapped[dict] = mapped_column(

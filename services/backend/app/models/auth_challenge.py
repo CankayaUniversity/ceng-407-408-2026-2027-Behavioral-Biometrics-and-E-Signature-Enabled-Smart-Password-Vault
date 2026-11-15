@@ -1,10 +1,11 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database.base import Base
+from ..database.types import UTCDateTime
 
 
 class AuthChallenge(Base):
@@ -29,9 +30,9 @@ class AuthChallenge(Base):
     )
     purpose: Mapped[str] = mapped_column(String(30))
     expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
     )
     consumed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=True,
     )
