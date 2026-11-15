@@ -339,3 +339,12 @@ also be rejected by backend context checks.
 
 Signature validity alone does not authorize a session transition.
 The detailed failed-attempt consumption policy remains pending review.
+## Session State Policy
+
+The proposed session lifecycle, protected-operation permissions,
+transition guards, expiration, and reauthentication rules are defined in
+[BE-04 Session State Machine](../docs/session-state-machine.md).
+
+This policy is pending team review.
+Session state changes are backend-controlled.
+TRUSTED alone does not unlock the encrypted vault.
