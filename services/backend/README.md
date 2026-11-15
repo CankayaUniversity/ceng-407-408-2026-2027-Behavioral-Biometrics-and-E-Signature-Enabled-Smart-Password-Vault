@@ -50,7 +50,7 @@ If the database becomes unavailable after startup, `/health` returns HTTP 503.
 
 API documentation: http://127.0.0.1:8000/docs
 
-Database models and table initialization will be implemented in BE-02.
+
 ## Tests
 
 Install test dependencies:
@@ -67,3 +67,41 @@ python -m pytest tests/integration/test_backend_health.py -v
 
 Tests use a temporary SQLite database and cover successful health checks
 and database connection failures.
+## Database Initialization
+
+Run from the repository root:
+
+```powershell
+python -m services.backend.app.database.init_db
+```
+
+Creates missing tables without deleting existing records.
+This command does not migrate or update existing table definitions.
+
+## Database Models
+
+- User: user identity and enrollment status.
+- Device: owner, public key, pairing status, and revocation time.
+- Session: owner, state, expiration, and re-authentication timestamps.
+- AuthChallenge: user, device, session, purpose, expiration, and consumption time.
+- SecurityEvent: event details and optional session reference.
+
+SQLite foreign key enforcement is enabled for application connections.
+Cross-record ownership checks and authentication policies must also be
+enforced by the authentication service.
+
+Enrollment and pairing statuses currently default to PENDING.
+New sessions default to LOCKED; state transition rules are defined in BE-04.
+
+Device private keys, vault passwords, decryption keys, and real biometric
+templates must not be stored in these models.
+Security event metadata must be sanitized before insertion.
+
+## Database Tests
+
+```powershell
+python -m pytest tests/integration/test_database_models.py -v
+```
+
+Tests use a temporary SQLite database and cover table creation,
+related records, foreign key enforcement, and duplicate user IDs.
