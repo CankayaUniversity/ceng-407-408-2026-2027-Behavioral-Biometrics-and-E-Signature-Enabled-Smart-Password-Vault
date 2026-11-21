@@ -13,6 +13,13 @@ from services.backend.app.api import challenges, devices, users
 from services.backend.app.database.base import Base
 from services.backend.app.models import AuthChallenge, PairingCode, Session
 
+from dataclasses import asdict
+
+from packages.device_protocol.protocol.challenge import AuthenticationChallenge
+from packages.device_protocol.protocol.response import AuthenticationResponse
+from packages.device_protocol.protocol.signing import DeviceSigner
+from services.backend.app.api import verification
+
 from services.backend.app.session_service import (
     get_session_for_user,
     revoke_session_for_user,
@@ -30,6 +37,7 @@ def pairing_api(tmp_path, monkeypatch):
     monkeypatch.setattr(users, "SessionLocal", session_factory)
     monkeypatch.setattr(devices, "SessionLocal", session_factory)
     monkeypatch.setattr(challenges, "SessionLocal", session_factory)
+    monkeypatch.setattr(verification, "SessionLocal", session_factory)
 
     with TestClient(backend.app) as client:
         yield client, session_factory
@@ -265,3 +273,76 @@ def test_other_user_cannot_read_or_revoke_session(pending_login):
         assert session.revoked_at is None
         assert challenge is not None
         assert challenge.consumed_at is None
+
+@pytest.fixture
+def signed_login(pairing_api):
+    client, session_factory = pairing_api
+    registration = register_user(client)
+    signer = DeviceSigner()
+    public_key = urlsafe_b64encode(signer.export_public_key()).decode("ascii").rstrip("=")
+
+    pairing = client.post(
+        "/v1/devices/pair",
+        headers={"Authorization": f"Bearer {registration['pairing_code']}"},
+        json={
+            "user_id": registration["user_id"],
+            "device_id": str(uuid4()),
+            "public_key": public_key,
+        },
+    )
+    assert pairing.status_code == 201
+
+    issuance = client.post(
+        "/v1/auth/challenges",
+        json={
+            "user_id": registration["user_id"],
+            "device_id": pairing.json()["device_id"],
+            "purpose": "login",
+        },
+    )
+    assert issuance.status_code == 201
+    body = issuance.json()
+
+    challenge = AuthenticationChallenge(**body["challenge"])
+    signed_response = AuthenticationResponse.create(challenge, signer, verified=True)
+
+    return client, session_factory, body["session_id"], asdict(signed_response)
+
+
+def test_signed_login_succeeds_only_once(signed_login):
+    client, session_factory, session_id, signed_response = signed_login
+
+    response = client.post("/v1/auth/verify", json=signed_response)
+
+    assert response.status_code == 200
+    assert response.json()["session"]["session_id"] == session_id
+    assert response.json()["session"]["state"] == "TRUSTED"
+
+    repeated = client.post("/v1/auth/verify", json=signed_response)
+
+    assert repeated.status_code == 409
+    assert repeated.json()["error"]["code"] == "REPLAY_DETECTED"
+
+    with session_factory() as db:
+        challenge = db.get(AuthChallenge, signed_response["challenge_id"])
+        assert challenge is not None
+        assert challenge.consumed_at is not None
+
+
+def test_signed_login_rejects_expired_challenge(signed_login):
+    client, session_factory, session_id, signed_response = signed_login
+
+    with session_factory.begin() as db:
+        challenge = db.get(AuthChallenge, signed_response["challenge_id"])
+        assert challenge is not None
+        challenge.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+
+    response = client.post("/v1/auth/verify", json=signed_response)
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "EXPIRED_CHALLENGE"
+
+    with session_factory() as db:
+        session = db.get(Session, session_id)
+        assert session is not None
+        assert session.state == "AUTH_PENDING"
