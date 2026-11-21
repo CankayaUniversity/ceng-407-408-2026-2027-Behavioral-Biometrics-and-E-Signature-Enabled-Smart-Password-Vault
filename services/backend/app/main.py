@@ -15,6 +15,10 @@ from .api.users import router as users_router
 
 from .api.devices import router as devices_router
 
+from .api.challenges import router as challenges_router
+
+from .api.verification import router as verification_router
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,6 +38,8 @@ app = FastAPI(
 )
 app.include_router(users_router)
 app.include_router(devices_router)
+app.include_router(challenges_router)
+app.include_router(verification_router)
 
 @app.exception_handler(RequestValidationError)
 async def handle_validation_error(_request, _exc):
