@@ -1,4 +1,5 @@
 from base64 import urlsafe_b64encode
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -8,18 +9,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from packages.device_protocol.fingerprint.models import FingerSlot
+from packages.device_protocol.protocol.challenge import AuthenticationChallenge
+from packages.device_protocol.simulator.mock_device import MockFingerprintDevice
 from services.backend.app import main as backend
-from services.backend.app.api import challenges, devices, users
+from services.backend.app.api import challenges, devices, users, verification
 from services.backend.app.database.base import Base
 from services.backend.app.models import AuthChallenge, PairingCode, Session
-
-from dataclasses import asdict
-
-from packages.device_protocol.protocol.challenge import AuthenticationChallenge
-from packages.device_protocol.protocol.response import AuthenticationResponse
-from packages.device_protocol.protocol.signing import DeviceSigner
-from services.backend.app.api import verification
-
 from services.backend.app.session_service import (
     get_session_for_user,
     revoke_session_for_user,
@@ -278,15 +274,21 @@ def test_other_user_cannot_read_or_revoke_session(pending_login):
 def signed_login(pairing_api):
     client, session_factory = pairing_api
     registration = register_user(client)
-    signer = DeviceSigner()
-    public_key = urlsafe_b64encode(signer.export_public_key()).decode("ascii").rstrip("=")
+    user_id = registration["user_id"]
 
+    device = MockFingerprintDevice(str(uuid4()))
+    device.enroll(user_id)
+    device.enroll_finger(user_id, FingerSlot.RIGHT_INDEX)
+
+    public_key = (
+        urlsafe_b64encode(device.export_public_key()).decode("ascii").rstrip("=")
+    )
     pairing = client.post(
         "/v1/devices/pair",
         headers={"Authorization": f"Bearer {registration['pairing_code']}"},
         json={
-            "user_id": registration["user_id"],
-            "device_id": str(uuid4()),
+            "user_id": user_id,
+            "device_id": device.device_id,
             "public_key": public_key,
         },
     )
@@ -295,8 +297,8 @@ def signed_login(pairing_api):
     issuance = client.post(
         "/v1/auth/challenges",
         json={
-            "user_id": registration["user_id"],
-            "device_id": pairing.json()["device_id"],
+            "user_id": user_id,
+            "device_id": device.device_id,
             "purpose": "login",
         },
     )
@@ -304,7 +306,9 @@ def signed_login(pairing_api):
     body = issuance.json()
 
     challenge = AuthenticationChallenge(**body["challenge"])
-    signed_response = AuthenticationResponse.create(challenge, signer, verified=True)
+    signed_response = device.respond_to_challenge(
+        challenge, FingerSlot.RIGHT_INDEX, scan_success=True
+    )
 
     return client, session_factory, body["session_id"], asdict(signed_response)
 
@@ -345,4 +349,43 @@ def test_signed_login_rejects_expired_challenge(signed_login):
     with session_factory() as db:
         session = db.get(Session, session_id)
         assert session is not None
+        assert session.state == "AUTH_PENDING"
+
+
+def test_signed_login_rejects_tampered_verification_result(signed_login):
+    client, _, _, signed_response = signed_login
+    tampered_response = {
+        **signed_response,
+        "payload": {**signed_response["payload"], "verified": False},
+    }
+
+    response = client.post("/v1/auth/verify", json=tampered_response)
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "INVALID_SIGNATURE"
+
+    original = client.post("/v1/auth/verify", json=signed_response)
+    assert original.status_code == 200
+
+
+def test_signed_login_rejects_mismatched_challenge_context(signed_login):
+    client, session_factory, session_id, signed_response = signed_login
+    challenge_id = signed_response["challenge_id"]
+
+    with session_factory.begin() as db:
+        challenge = db.get(AuthChallenge, challenge_id)
+        assert challenge is not None
+        challenge.nonce = "different-" + challenge.nonce
+
+    response = client.post("/v1/auth/verify", json=signed_response)
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "REQUEST_MISMATCH"
+
+    with session_factory() as db:
+        challenge = db.get(AuthChallenge, challenge_id)
+        session = db.get(Session, session_id)
+        assert challenge is not None
+        assert session is not None
+        assert challenge.consumed_at is None
         assert session.state == "AUTH_PENDING"
