@@ -10,7 +10,7 @@ from services.backend.app.schemas.auth import (
 from services.backend.app.schemas.device import DevicePairResponse
 from services.backend.app.schemas.error import ErrorResponse
 from services.backend.app.schemas.session import SessionResponse
-from services.backend.app.schemas.user import UserCreateResponse
+from services.backend.app.schemas.user import UserRegistrationResponse
 
 
 EXAMPLES_PATH = (
@@ -24,7 +24,7 @@ EXAMPLES_PATH = (
 @pytest.mark.parametrize(
     "example_name, schema",
     [
-        ("user_created", UserCreateResponse),
+        ("user_created", UserRegistrationResponse),
         ("device_pairing", DevicePairResponse),
         ("challenge_created", AuthChallengeCreateResponse),
         ("authentication_verified", AuthVerifyResponse),

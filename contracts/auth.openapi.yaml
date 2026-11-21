@@ -2,66 +2,36 @@ openapi: 3.1.0
 info:
   title: Authentication API
   version: 0.1.0
-  description: Draft BE-03 contract. Endpoints are not implemented by this specification.
-    Authentication credentials, pairing bootstrap, and policies require team review.
-    Missing security declarations do not imply public access. Timestamp schemas require
-    explicit timezones; backend responses must be normalized to UTC. Device signatures
-    cover version, challenge_id, device_id, and payload. Session binding is resolved
-    from the authoritative stored challenge. See auth_api.md and device_protocol.md.
+  description: User registration and device pairing are implemented in BE-05. Challenge,
+    verification, and session operations are draft contracts. Missing security declarations
+    do not imply public access. Response timestamps must be normalized to UTC. Device
+    signatures cover version, challenge_id, device_id, and payload. Session binding
+    is resolved from the stored challenge. See auth_api.md and device_protocol.md.
 paths:
   /v1/users:
     post:
-      summary: Create a user
-      description: Draft contract only; this endpoint is not implemented by the exporter.
-        Authorization and policy require team review.
+      summary: Create a user and issue a single-use pairing code
       responses:
         '201':
           description: Successful response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserCreateResponse'
-        default:
-          description: Error response. See auth_api.md for proposed HTTP status and
-            error code mappings.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/UserRegistrationResponse'
           headers:
-            WWW-Authenticate:
-              description: Required authentication challenge; scheme and values pending
-                team review.
+            Cache-Control:
+              description: Prevents caching of the pairing credential.
               schema:
                 type: string
-        '403':
-          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
-            or an allowed session state.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                const: no-store
         '422':
-          description: 'VALIDATION_ERROR: invalid fields, types, required values,
-            or cross-field constraints.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '429':
-          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          description: 'VALIDATION_ERROR: invalid registration request.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: 'INTERNAL_ERROR: unexpected server failure.'
+          description: 'INTERNAL_ERROR: unable to create user.'
           content:
             application/json:
               schema:
@@ -72,11 +42,11 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/UserCreateRequest'
+      description: The pairing code belongs to the newly created user and expires
+        five minutes after issuance.
   /v1/devices/pair:
     post:
-      summary: Pair a device through an authorized flow
-      description: Draft contract only; this endpoint is not implemented by the exporter.
-        Authorization and policy require team review.
+      summary: Register a pending device using a pairing code
       responses:
         '201':
           description: Successful response
@@ -84,60 +54,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DevicePairResponse'
-        default:
-          description: Error response. See auth_api.md for proposed HTTP status and
-            error code mappings.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          description: 'UNAUTHORIZED: pairing code is missing, invalid, expired, already
+            used, or issued for a different user.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
           headers:
             WWW-Authenticate:
-              description: Required authentication challenge; scheme and values pending
-                team review.
+              description: Authentication challenge.
               schema:
                 type: string
-        '403':
-          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
-            or an allowed session state.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: 'NOT_FOUND: an authorized resource lookup finds no resource.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                const: Bearer
         '409':
-          description: 'DEVICE_ALREADY_REGISTERED: pairing conflicts with an existing
-            device registration.'
+          description: 'DEVICE_ALREADY_REGISTERED: the device ID already exists.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: 'VALIDATION_ERROR: invalid fields, types, required values,
-            or cross-field constraints.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '429':
-          description: 'RATE_LIMITED: request or authentication attempt limit exceeded.'
+          description: 'VALIDATION_ERROR: invalid request fields or public key encoding.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: 'INTERNAL_ERROR: unexpected server failure.'
+          description: 'INTERNAL_ERROR: unable to register device.'
           content:
             application/json:
               schema:
@@ -148,11 +91,15 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DevicePairRequest'
+      security:
+      - PairingCode: []
+      description: Send the registration pairing code in the Authorization bearer
+        header. The public key must be 32 raw Ed25519 bytes encoded as unpadded Base64url.
+        A successful registration consumes the code and creates a PENDING device record
+        in the same transaction.
   /v1/auth/challenges:
     post:
-      summary: Create an authentication challenge
-      description: Draft contract only; this endpoint is not implemented by the exporter.
-        Authorization and policy require team review.
+      summary: Create an authentication challenge (draft)
       responses:
         '201':
           description: Successful response
@@ -160,35 +107,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthChallengeCreateResponse'
-        default:
-          description: Error response. See auth_api.md for proposed HTTP status and
-            error code mappings.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          description: 'UNAUTHORIZED: required credentials are missing, invalid, or
+            expired.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
           headers:
             WWW-Authenticate:
-              description: Required authentication challenge; scheme and values pending
-                team review.
+              description: Authentication challenge.
               schema:
                 type: string
         '403':
-          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
-            or an allowed session state.'
+          description: 'FORBIDDEN: the caller lacks permission or the session state
+            disallows the operation.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: 'VALIDATION_ERROR: invalid fields, types, required values,
-            or cross-field constraints.'
+          description: 'VALIDATION_ERROR: request fields or cross-field constraints
+            are invalid.'
           content:
             application/json:
               schema:
@@ -213,9 +153,7 @@ paths:
               $ref: '#/components/schemas/AuthChallengeCreateRequest'
   /v1/auth/verify:
     post:
-      summary: Submit a signed device response
-      description: Draft contract only; this endpoint is not implemented by the exporter.
-        Authorization and policy require team review.
+      summary: Submit a signed device response (draft)
       responses:
         '200':
           description: Successful response
@@ -223,53 +161,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthVerifyResponse'
-        default:
-          description: Error response. See auth_api.md for proposed HTTP status and
-            error code mappings.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '400':
-          description: 'INVALID_CHALLENGE: the referenced challenge is unknown.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: 'UNAUTHORIZED: missing, invalid, or expired credentials. Device
-            verification failures: EXPIRED_CHALLENGE (stored challenge expired), INVALID_SIGNATURE
-            (signature verification failed), DEVICE_MISMATCH (unexpected device),
-            REQUEST_MISMATCH (signed context differs from the stored challenge), or
-            VERIFICATION_FAILED (signed verified=false). Detailed conditions and disclosure
-            rules are defined in auth_api.md.'
+          description: 'UNAUTHORIZED: required credentials are missing, invalid, or
+            expired. Device verification may also return EXPIRED_CHALLENGE, INVALID_SIGNATURE,
+            DEVICE_MISMATCH, REQUEST_MISMATCH, or VERIFICATION_FAILED.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
           headers:
             WWW-Authenticate:
-              description: Required authentication challenge; scheme and values pending
-                team review.
+              description: Authentication challenge.
               schema:
                 type: string
         '403':
-          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
-            or an allowed session state.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '409':
-          description: 'REPLAY_DETECTED: challenge already finalized or atomic consumption
-            loses a race.'
+          description: 'FORBIDDEN: the caller lacks permission or the session state
+            disallows the operation.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: 'VALIDATION_ERROR: invalid fields, types, required values,
-            or cross-field constraints.'
+          description: 'VALIDATION_ERROR: request fields or cross-field constraints
+            are invalid.'
           content:
             application/json:
               schema:
@@ -282,6 +196,18 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: 'INTERNAL_ERROR: unexpected server failure.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: 'INVALID_CHALLENGE: the referenced challenge is unknown.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'REPLAY_DETECTED: the challenge was already consumed.'
           content:
             application/json:
               schema:
@@ -294,9 +220,7 @@ paths:
               $ref: '#/components/schemas/AuthVerifyRequest'
   /v1/sessions/{session_id}:
     get:
-      summary: Read an authorized session
-      description: Draft contract only; this endpoint is not implemented by the exporter.
-        Authorization and policy require team review.
+      summary: Read an authorized session (draft)
       responses:
         '200':
           description: Successful response
@@ -304,41 +228,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionResponse'
-        default:
-          description: Error response. See auth_api.md for proposed HTTP status and
-            error code mappings.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          description: 'UNAUTHORIZED: required credentials are missing, invalid, or
+            expired.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
           headers:
             WWW-Authenticate:
-              description: Required authentication challenge; scheme and values pending
-                team review.
+              description: Authentication challenge.
               schema:
                 type: string
         '403':
-          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
-            or an allowed session state.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: 'NOT_FOUND: an authorized resource lookup finds no resource.'
+          description: 'FORBIDDEN: the caller lacks permission or the session state
+            disallows the operation.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: 'VALIDATION_ERROR: invalid fields, types, required values,
-            or cross-field constraints.'
+          description: 'VALIDATION_ERROR: request fields or cross-field constraints
+            are invalid.'
           content:
             application/json:
               schema:
@@ -351,6 +262,13 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: 'INTERNAL_ERROR: unexpected server failure.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 'NOT_FOUND: an authorized resource lookup found no matching
+            resource.'
           content:
             application/json:
               schema:
@@ -365,9 +283,7 @@ paths:
         maxLength: 36
   /v1/sessions/{session_id}/revoke:
     post:
-      summary: Revoke an authorized session
-      description: Draft contract only; this endpoint is not implemented by the exporter.
-        Authorization and policy require team review.
+      summary: Revoke an authorized session (draft)
       responses:
         '200':
           description: Successful response
@@ -375,41 +291,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionResponse'
-        default:
-          description: Error response. See auth_api.md for proposed HTTP status and
-            error code mappings.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: 'UNAUTHORIZED: missing, invalid, or expired credentials.'
+          description: 'UNAUTHORIZED: required credentials are missing, invalid, or
+            expired.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
           headers:
             WWW-Authenticate:
-              description: Required authentication challenge; scheme and values pending
-                team review.
+              description: Authentication challenge.
               schema:
                 type: string
         '403':
-          description: 'FORBIDDEN: the authenticated caller lacks permission, ownership,
-            or an allowed session state.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: 'NOT_FOUND: an authorized resource lookup finds no resource.'
+          description: 'FORBIDDEN: the caller lacks permission or the session state
+            disallows the operation.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: 'VALIDATION_ERROR: invalid fields, types, required values,
-            or cross-field constraints.'
+          description: 'VALIDATION_ERROR: request fields or cross-field constraints
+            are invalid.'
           content:
             application/json:
               schema:
@@ -422,6 +325,13 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: 'INTERNAL_ERROR: unexpected server failure.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 'NOT_FOUND: an authorized resource lookup found no matching
+            resource.'
           content:
             application/json:
               schema:
@@ -448,7 +358,7 @@ components:
       - display_name
       title: UserCreateRequest
       type: object
-    UserCreateResponse:
+    UserRegistrationResponse:
       additionalProperties: false
       properties:
         user_id:
@@ -464,12 +374,21 @@ components:
           format: date-time
           title: Created At
           type: string
+        pairing_code:
+          title: Pairing Code
+          type: string
+        pairing_code_expires_at:
+          format: date-time
+          title: Pairing Code Expires At
+          type: string
       required:
       - user_id
       - display_name
       - enrollment_status
       - created_at
-      title: UserCreateResponse
+      - pairing_code
+      - pairing_code_expires_at
+      title: UserRegistrationResponse
       type: object
     DevicePairRequest:
       additionalProperties: false
@@ -743,3 +662,7 @@ components:
       - error
       title: ErrorResponse
       type: object
+  securitySchemes:
+    PairingCode:
+      type: http
+      scheme: bearer

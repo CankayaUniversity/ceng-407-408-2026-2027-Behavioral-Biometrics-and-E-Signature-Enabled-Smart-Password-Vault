@@ -4,3 +4,4 @@ from .device import Device
 from .session import Session
 from .auth_challenge import AuthChallenge
 from .security_event import SecurityEvent
+from .pairing_code import PairingCode
