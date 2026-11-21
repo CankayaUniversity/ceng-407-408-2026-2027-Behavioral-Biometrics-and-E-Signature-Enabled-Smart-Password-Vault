@@ -57,10 +57,10 @@ jobs:
           python -m pytest \
             tests/integration/test_backend_health.py \
             tests/integration/test_database_models.py \
+            tests/integration/test_device_pairing.py \
             tests/unit/test_auth_schemas.py \
             tests/unit/test_auth_examples.py \
             tests/unit/test_auth_openapi.py -v
-
   ui:
     name: UI checks
     runs-on: ubuntu-latest

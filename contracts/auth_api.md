@@ -117,8 +117,15 @@ Successful response: HTTP 201
 - display_name
 - enrollment_status
 - created_at: UTC timestamp
+- pairing_code: single-use bearer credential issued for the newly created user.
+- pairing_code_expires_at: UTC timestamp, five minutes after issuance.
+
+The backend stores only the pairing code hash. The registration
+response includes `Cache-Control: no-store`.
 
 Registration begins enrollment and does not create an authenticated session.
+
+## Device Pairing
 
 ## Device Pairing
 
@@ -127,17 +134,26 @@ POST /v1/devices/pair
 Request:
 - user_id: required string, 1–36 characters.
 - device_id: required string, 1–36 characters.
-- public_key: required, non-empty string.
+- public_key: 32 raw Ed25519 public key bytes encoded as unpadded Base64url.
+
+Send the registration pairing code in the `Authorization: Bearer <code>`
+header. The code must belong to the user in the request. The backend
+consumes it in the same database transaction that creates the `PENDING`
+device record.
 
 Successful response: HTTP 201
 - device_id
 - user_id
 - pairing_status
 
-Request validation alone does not authorize pairing.
-The backend must verify pairing authorization and user ownership.
-The initial pairing bootstrap and public key encoding require team review.
-An existing device must not be silently overwritten or reassigned.
+Error responses:
+- 401 UNAUTHORIZED: the pairing code is missing, invalid, expired,
+  previously used, or issued for a different user.
+- 409 DEVICE_ALREADY_REGISTERED: the device ID already exists. The
+  transaction rolls back, so the pairing code remains usable until expiry.
+- 422 VALIDATION_ERROR: request fields or public key encoding are invalid.
+
+An existing device must not be overwritten or reassigned.
 Private keys and fingerprint templates are never accepted by this request.
 ## Device Challenge and Verification Schemas
 
