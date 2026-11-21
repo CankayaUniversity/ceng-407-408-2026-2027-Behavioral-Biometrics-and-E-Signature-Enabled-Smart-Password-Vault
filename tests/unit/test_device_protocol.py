@@ -142,5 +142,34 @@ def test_device_rejects_challenge_for_another_device():
         device.respond_to_challenge(
             challenge, FingerSlot.RIGHT_INDEX, scan_success=True
         )
-    
+  
+@pytest.mark.parametrize("changed_field", ["verified", "nonce"])
+def test_signature_rejects_modified_payload(signed_device_exchange, changed_field):
+    _, response, public_key = signed_device_exchange
+    signed_data = {
+        "version": response.version,
+        "challenge_id": response.challenge_id,
+        "device_id": response.device_id,
+        "payload": response.payload.copy(),
+    }
+    signature = base64.urlsafe_b64decode(
+        response.signature + "=" * (-len(response.signature) % 4)
+    )
+
+    original_message = json.dumps(
+        signed_data, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    assert DeviceSigner.verify(
+        public_key, b"DEVICE_AUTH_V1\x00" + original_message, signature
+    )
+
+    changed_value = False if changed_field == "verified" else "different_nonce"
+    signed_data["payload"][changed_field] = changed_value
+
+    changed_message = json.dumps(
+        signed_data, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    assert not DeviceSigner.verify(
+        public_key, b"DEVICE_AUTH_V1\x00" + changed_message, signature
+    )  
     
