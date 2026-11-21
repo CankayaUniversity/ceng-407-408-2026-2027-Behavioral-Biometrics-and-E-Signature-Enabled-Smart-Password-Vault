@@ -1,5 +1,4 @@
 from dataclasses import asdict
-from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, status
@@ -9,7 +8,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from packages.device_protocol.protocol.challenge import AuthenticationChallenge
 
 from ..database.connection import SessionLocal
-from ..models import AuthChallenge, Device, Session
+from ..models import AuthChallenge, Device
+from ..session_service import create_pending_session
 from ..schemas.auth import (
     AuthChallengeCreateRequest,
     AuthChallengeCreateResponse,
@@ -18,7 +18,7 @@ from ..schemas.auth import (
 
 
 router = APIRouter(prefix="/v1/auth", tags=["authentication"])
-INITIAL_SESSION_TTL = timedelta(minutes=15)
+
 
 
 def error_response(status_code: int, code: str, message: str) -> JSONResponse:
@@ -66,14 +66,7 @@ def create_challenge(request: AuthChallengeCreateRequest):
                     )
                 )
             )
-
-            session = Session(
-                user_id=request.user_id,
-                state="AUTH_PENDING",
-                expires_at=datetime.now(timezone.utc) + INITIAL_SESSION_TTL,
-            )
-            db.add(session)
-            db.flush()
+            session = create_pending_session(db, user_id=request.user_id)
 
             db.add(
                 AuthChallenge(
