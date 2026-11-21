@@ -10,8 +10,10 @@ user verification for the Smart Password Vault project.
 - Create user profiles from enrollment windows.
 - Verify behavior against a claimed user's profile.
 - Support rejection of behavior that does not match the claimed user.
+- Train and evaluate using separate recording sessions.
+- Calibrate the verification threshold on development sessions.
+- Export evaluation metrics and trial results as a JSON report.
 
-Session-based training and evaluation will be implemented in AI-04.
 Profile persistence and backend integration are not included yet.
 
 ## Setup
@@ -69,8 +71,50 @@ a new window against the claimed user's profile and returns an acceptance
 decision, reason, and distance when a comparison is performed.
 
 The caller must supply the appropriate user profile and an explicit
-threshold. Threshold calibration and real-world performance evaluation
-belong to AI-04.
+threshold. The evaluation workflow below selects a threshold using
+development sessions and applies it to separate test sessions.
+
+## Session-Based Training and Evaluation
+
+Create a local split file assigning every input session to exactly one
+group. Use session IDs from the recordings, not filenames:
+
+```json
+{
+  "train_ids": ["alice-training"],
+  "development_ids": ["alice-development", "charlie-development"],
+  "test_ids": ["alice-test", "dana-test"]
+}
+```
+
+Replace these example IDs with your actual session IDs.
+
+Training requires at least two usable windows per enrolled user.
+Development and test groups must each produce genuine and impostor trials.
+To measure unknown-individual rejection, include participants who are
+absent from training.
+
+Run from the repository root:
+
+```bash
+.venv/bin/python -m packages.behavioral_ai.evaluation \
+  --sessions packages/behavioral_ai/legacy/data/sessions \
+  --split packages/behavioral_ai/legacy/data/split.json \
+  --output packages/behavioral_ai/legacy/data/reports/evaluation.json
+```
+
+Training sessions build user profiles. Development sessions select the
+threshold. Test sessions are evaluated using that fixed threshold.
+
+The report includes session assignments, input content hashes, the selected
+threshold, trial results, and false acceptance and false rejection rates.
+Unknown-individual false acceptance is reported separately when available.
+
+Rates cover usable windows only. Incomplete windows and low-coverage windows
+are excluded; evaluation sessions without usable windows cause an error.
+
+Existing reports are not overwritten. Keep split files outside the session
+input directory and store reports locally.
 
 ## Tests
 
@@ -78,21 +122,22 @@ belong to AI-04.
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest packages/behavioral_ai/tests -q
 ```
 
-Tests cover collection, feature extraction, enrollment, profile validation,
-and verification. Synthetic tests validate implementation behavior;
-they do not establish real-world biometric accuracy.
+Tests cover collection, feature extraction, enrollment, verification,
+session separation, calibration, reporting, and the evaluation command.
+Synthetic tests validate implementation behavior; they do not establish
+real-world biometric accuracy.
 
 ## Data Handling
 
 Do not commit participant recordings, generated feature tables, user
-profiles, or virtual environments. Use synthetic data in tests.
+profiles, evaluation reports, or virtual environments. Use synthetic data in tests.
 
 ## Package Structure
 
 - `legacy/`: collection application and saved-session extraction.
 - `features/`: shared feature extraction.
 - `models/`: behavioral user profiles.
-- `training/`: enrollment.
+- `training/`: session loading, partitioning, and profile training.
 - `inference/`: user verification.
-- `evaluation/`: placeholder for AI-04.
+- `evaluation/`: scoring, metrics, calibration, reporting, and command-line evaluation.
 - `tests/`: behavioral AI tests.
