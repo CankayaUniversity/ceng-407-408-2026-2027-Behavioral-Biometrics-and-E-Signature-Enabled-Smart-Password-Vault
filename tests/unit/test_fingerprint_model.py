@@ -10,6 +10,10 @@ from packages.device_protocol.fingerprint.enrollment import (
     FingerprintEnrollmentManager,
 )
 
+from packages.device_protocol.simulator.enrollment_service import (
+    FingerprintEnrollmentService,
+)
+
 
 def test_enrollment():
     manager = FingerprintEnrollmentManager()
@@ -116,3 +120,36 @@ def test_unregistered_user_cannot_enroll_finger():
     assert device.enroll_finger(
         "unknown_user", FingerSlot.RIGHT_INDEX
     ) is False
+    
+def test_service_enrolls_finger_and_rejects_duplicates():
+    device = MockFingerprintDevice("device_01")
+    service = FingerprintEnrollmentService(device)
+
+    assert service.enroll_finger("user_01", "right_index") is True
+    assert service.enroll_finger("user_01", "right_index") is False
+    assert service.get_enrolled_fingers("user_01") == {FingerSlot.RIGHT_INDEX}
+    assert device.verify_finger(
+        "user_01", FingerSlot.RIGHT_INDEX, scan_success=True
+    ) is True
+
+
+def test_service_keeps_enrollments_separate_by_user_and_device():
+    first = FingerprintEnrollmentService(MockFingerprintDevice("device_01"))
+    second = FingerprintEnrollmentService(MockFingerprintDevice("device_02"))
+
+    first.enroll_finger("user_01", "right_index")
+
+    assert first.get_enrolled_fingers("user_02") == set()
+    assert second.get_enrolled_fingers("user_01") == set()
+    assert second.enroll_finger("user_01", "right_index") is True
+
+
+def test_service_rejects_invalid_slot_before_registering_user():
+    device = MockFingerprintDevice("device_01")
+    service = FingerprintEnrollmentService(device)
+
+    with pytest.raises(ValueError):
+        service.enroll_finger("user_01", "invalid_slot")
+
+    assert "user_01" not in device.enrolled_users
+    assert service.get_enrolled_fingers("user_01") == set()
