@@ -9,9 +9,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from services.backend.app import main as backend
-from services.backend.app.api import devices, users
+from services.backend.app.api import challenges, devices, users
 from services.backend.app.database.base import Base
-from services.backend.app.models import PairingCode
+from services.backend.app.models import AuthChallenge, PairingCode, Session
 
 
 @pytest.fixture
@@ -24,6 +24,7 @@ def pairing_api(tmp_path, monkeypatch):
     monkeypatch.setattr(backend, "engine", engine)
     monkeypatch.setattr(users, "SessionLocal", session_factory)
     monkeypatch.setattr(devices, "SessionLocal", session_factory)
+    monkeypatch.setattr(challenges, "SessionLocal", session_factory)
 
     with TestClient(backend.app) as client:
         yield client, session_factory
@@ -104,3 +105,63 @@ def test_duplicate_device_does_not_consume_pairing_code(pairing_api):
     assert duplicate.status_code == 409
     assert duplicate.json()["error"]["code"] == "DEVICE_ALREADY_REGISTERED"
     assert pair_device(client, second_user).status_code == 201
+
+def test_login_challenge_is_saved_with_pending_session(pairing_api):
+    client, session_factory = pairing_api
+    owner = register_user(client)
+    pairing = pair_device(client, owner)
+    assert pairing.status_code == 201
+    device_id = pairing.json()["device_id"]
+
+    response = client.post(
+        "/v1/auth/challenges",
+        json={
+            "user_id": owner["user_id"],
+            "device_id": device_id,
+            "purpose": "login",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    challenge = body["challenge"]
+
+    with session_factory() as db:
+        session = db.get(Session, body["session_id"])
+        saved = db.get(AuthChallenge, challenge["challenge_id"])
+
+        assert session is not None
+        assert session.user_id == owner["user_id"]
+        assert session.state == "AUTH_PENDING"
+
+        assert saved is not None
+        assert saved.session_id == session.session_id
+        assert saved.user_id == owner["user_id"]
+        assert saved.device_id == device_id
+        assert saved.protocol_version == challenge["version"] == 1
+        assert saved.request_id == challenge["request_id"]
+        assert saved.nonce == challenge["nonce"]
+        assert saved.purpose == "login"
+        assert saved.consumed_at is None
+        assert saved.expires_at == datetime.fromisoformat(challenge["expires_at"])
+        assert saved.expires_at < session.expires_at
+
+
+def test_login_challenge_rejects_device_owned_by_another_user(pairing_api):
+    client, _ = pairing_api
+    owner = register_user(client)
+    other_user = register_user(client)
+    pairing = pair_device(client, owner)
+    assert pairing.status_code == 201
+
+    response = client.post(
+        "/v1/auth/challenges",
+        json={
+            "user_id": other_user["user_id"],
+            "device_id": pairing.json()["device_id"],
+            "purpose": "login",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
