@@ -1,24 +1,27 @@
-# Behavioral AI Prototype
+# Behavioral AI
 
-This package contains the existing keystroke collection and feature
-extraction prototype.
+Keystroke timing collection, shared feature extraction, and behavioral
+user verification for the Smart Password Vault project.
 
 ## Current Scope
 
-- Collect keystroke timing inside the application's text area.
-- Save session timing samples as local JSON files.
-- Extract features from non-overlapping windows of 100 samples.
+- Collect and save keystroke timing sessions.
+- Extract features using the shared AI-02 pipeline.
+- Create user profiles from enrollment windows.
+- Verify behavior against a claimed user's profile.
+- Support rejection of behavior that does not match the claimed user.
 
-Mouse collection, model training, and user verification are not
-implemented in this prototype.
+Session-based training and evaluation will be implemented in AI-04.
+Profile persistence and backend integration are not included yet.
 
 ## Setup
 
-Run these commands from the repository root:
+Requires Python 3.11 or later. Run from the repository root:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r packages/behavioral_ai/requirements.txt
+.venv/bin/python -m pip install pytest
 ```
 
 ## Collect a Session
@@ -27,12 +30,12 @@ python3 -m venv .venv
 .venv/bin/python packages/behavioral_ai/legacy/main.py
 ```
 
-Enter a participant alias, start measurement, and type in the text area.
-Save the session after collecting at least 100 valid samples.
+Enter a participant alias, start measurement, and type in the application's
+text area. Save the session after collecting at least 100 valid samples.
 
-Sessions are saved under `legacy/data/sessions/`, relative to this package.
-The saved records contain timing measurements and session metadata,
-not the typed text or key identities.
+Sessions are stored under `packages/behavioral_ai/legacy/data/sessions/`.
+Records contain timing measurements and session metadata, not typed text
+or key identities.
 
 ## Extract Features
 
@@ -40,55 +43,56 @@ not the typed text or key identities.
 .venv/bin/python -m packages.behavioral_ai.legacy.extract_features
 ```
 
-Output: `legacy/data/features.csv`.
+Output: `packages/behavioral_ai/legacy/data/features.csv`.
 
-Incomplete windows are discarded. Windows with insufficient transition
-coverage are skipped. A successful extraction replaces the existing CSV;
-the source JSON files remain unchanged.
+Extraction processes sessions separately using non-overlapping windows
+of 100 samples. Incomplete windows are discarded, and windows with
+insufficient transition coverage are skipped.
+
+Enrollment and verification reuse the same feature extraction pipeline.
+
+## Enrollment and Verification
+
+The main entry points are:
+
+```python
+from packages.behavioral_ai.training.enrollment import enroll_user
+from packages.behavioral_ai.inference.verifier import verify_window
+```
+
+`enroll_user(user_id, windows)` creates a profile from at least two valid
+enrollment windows. Each window must contain exactly 100 timing samples
+belonging to the same user.
+
+`verify_window(claimed_user_id, samples, profile, threshold=...)` compares
+a new window against the claimed user's profile and returns an acceptance
+decision, reason, and distance when a comparison is performed.
+
+The caller must supply the appropriate user profile and an explicit
+threshold. Threshold calibration and real-world performance evaluation
+belong to AI-04.
+
+## Tests
+
+```bash
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest packages/behavioral_ai/tests -q
+```
+
+Tests cover collection, feature extraction, enrollment, profile validation,
+and verification. Synthetic tests validate implementation behavior;
+they do not establish real-world biometric accuracy.
 
 ## Data Handling
 
-Session recordings and generated feature tables are local data and must
-not be committed. Virtual environments must also remain outside Git.
+Do not commit participant recordings, generated feature tables, user
+profiles, or virtual environments. Use synthetic data in tests.
 
-## Migration Notes
+## Package Structure
 
-The original scripts remain together under `legacy/` to preserve their
-relative data paths. Shared feature pipeline refactoring belongs to AI-02.
-
-## Shared Feature Extraction
-
-Saved-session extraction and future live inference use the same
-functions from `packages.behavioral_ai.features`.
-
-```python
-from packages.behavioral_ai.features import (
-    extract_window,
-    feature_vector,
-)
-
-features = extract_window(samples)
-
-if features is not None:
-    model_input = feature_vector(features)
-```
-
-Each window contains 100 samples. Batch extraction uses non-overlapping
-windows and discards an incomplete final window. Process each session
-separately.
-
-The first transition in each window is excluded. Missing transitions
-are excluded rather than replaced with zero. Both down-down and flight
-transition coverage must be at least 70%.
-
-The model vector contains 13 features in the order defined by
-`FEATURE_NAMES`. Counts, coverage, and session identifiers are not
-model inputs.
-
-Configuration and feature version are defined in `features/config.py`.
-
-Run the tests from the repository root:
-
-```bash
-python -m pytest packages/behavioral_ai/tests -q
-```
+- `legacy/`: collection application and saved-session extraction.
+- `features/`: shared feature extraction.
+- `models/`: behavioral user profiles.
+- `training/`: enrollment.
+- `inference/`: user verification.
+- `evaluation/`: placeholder for AI-04.
+- `tests/`: behavioral AI tests.
