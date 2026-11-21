@@ -17,3 +17,7 @@ class UserCreateResponse(BaseModel):
     display_name: str
     enrollment_status: str
     created_at: AwareDatetime
+    
+class UserRegistrationResponse(UserCreateResponse):
+    pairing_code: str
+    pairing_code_expires_at: AwareDatetime

@@ -3,7 +3,9 @@
     "user_id": "example-user",
     "display_name": "Example User",
     "enrollment_status": "PENDING",
-    "created_at": "2026-11-15T12:00:00Z"
+    "created_at": "2026-11-15T12:00:00Z",
+    "pairing_code": "MOCK_PAIRING_CODE_NOT_FOR_AUTHENTICATION",
+    "pairing_code_expires_at": "2026-11-15T12:05:00Z"
   },
   "device_pairing": {
     "device_id": "example-device",

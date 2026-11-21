@@ -39,6 +39,7 @@ def test_tables_created(engine):
         "sessions",
         "auth_challenges",
         "security_events",
+        "pairing_codes",
     }
 
 
