@@ -1,11 +1,12 @@
 import { useState } from "react"
 
-export type PageId = "login" | "dashboard" | "security"
+export type PageId = "login" | "dashboard" | "security" | "enrollment"
 
 export const PAGE_TITLES: Record<PageId, string> = {
   login: "Login",
   dashboard: "Dashboard",
   security: "Security Status",
+  enrollment: "Enrollment",
 }
 
 export function useAppController() {
@@ -15,7 +16,8 @@ export function useAppController() {
     if (
       page === "login" ||
       page === "dashboard" ||
-      page === "security"
+      page === "security" ||
+      page === "enrollment"
     ) {
       setActivePage(page)
     }
