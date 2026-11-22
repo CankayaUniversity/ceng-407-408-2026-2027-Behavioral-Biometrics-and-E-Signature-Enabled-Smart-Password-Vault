@@ -172,8 +172,8 @@ def test_two_vaults_use_distinct_salts_and_wrapped_keys(tmp_path: Path) -> None:
 
 
 def test_malformed_json_rejected(storage: JsonVaultStorage, vault_path: Path) -> None:
+    storage.create({})
     vault_path.write_text("{malformed", encoding="utf-8")
-    vault_path.chmod(0o600)
     with pytest.raises(json.JSONDecodeError):
         storage.read()
 
