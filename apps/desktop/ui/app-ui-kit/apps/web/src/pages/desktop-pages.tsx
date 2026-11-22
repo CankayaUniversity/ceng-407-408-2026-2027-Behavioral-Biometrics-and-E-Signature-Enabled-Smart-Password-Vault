@@ -10,9 +10,10 @@ import {
 
 type LoginPageProps = {
   onPreview: () => void
+  onEnroll: () => void
 }
 
-export function LoginPage({ onPreview }: LoginPageProps) {
+export function LoginPage({ onPreview, onEnroll }: LoginPageProps) {
   return (
     <div className="mx-auto w-full max-w-lg py-12">
       <Card>
@@ -31,7 +32,8 @@ export function LoginPage({ onPreview }: LoginPageProps) {
             in a later sprint. You can explore the interface in demo mode.
           </p>
 
-          <Button onClick={onPreview}>
+          <Button onClick={onEnroll}>Create user and enroll device</Button>
+          <Button variant="outline" onClick={onPreview}>
             Explore demo workspace
           </Button>
 

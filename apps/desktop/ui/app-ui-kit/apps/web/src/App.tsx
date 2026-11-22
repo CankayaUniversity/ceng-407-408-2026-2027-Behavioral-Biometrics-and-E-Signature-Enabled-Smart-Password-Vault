@@ -2,12 +2,14 @@ import {
   LayoutDashboard,
   LogIn,
   ShieldCheck,
+  UserPlus,
 } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Navigation } from "@workspace/ui/components/navigation"
 
 import { useAppController } from "./controllers/use-app-controller"
+import { EnrollmentPage } from "./pages/enrollment-page"
 import {
   DashboardPage,
   LoginPage,
@@ -15,6 +17,7 @@ import {
 } from "./pages/desktop-pages"
 
 const navigationItems = [
+  { id: "enrollment", label: "Enrollment", icon: <UserPlus aria-hidden="true" className="size-4" /> },
   {
     id: "login",
     label: "Login",
@@ -60,9 +63,9 @@ export function App() {
         />
 
         <div className="mt-auto space-y-3 px-2 pt-8">
-          <Badge variant="outline">Demo mode</Badge>
+          <Badge variant="outline">Enrollment + UI preview</Badge>
           <p className="text-xs leading-5 text-muted-foreground">
-            Interface preview. No real authentication or vault access.
+            Enrollment can use local services. Login and vault remain previews.
           </p>
         </div>
       </aside>
@@ -78,12 +81,15 @@ export function App() {
         </header>
 
         {activePage === "login" && (
-          <LoginPage onPreview={() => navigate("dashboard")} />
+          <LoginPage onPreview={() => navigate("dashboard")} onEnroll={() => navigate("enrollment")} />
         )}
 
         {activePage === "dashboard" && <DashboardPage />}
 
         {activePage === "security" && <SecurityStatusPage />}
+        <section hidden={activePage !== "enrollment"} aria-label="User and device enrollment">
+          <EnrollmentPage />
+        </section>
       </main>
     </div>
   )

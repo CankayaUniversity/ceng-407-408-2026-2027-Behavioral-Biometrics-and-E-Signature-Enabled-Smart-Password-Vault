@@ -1,10 +1,13 @@
 const path = require("node:path");
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
+const { EnrollmentBridge } = require("./enrollment.cjs");
+const { pathToFileURL } = require("node:url");
 
 const DEV_URL = "http://127.0.0.1:5173";
 const isDevelopment = !app.isPackaged && process.argv.includes("--dev");
 
 function createWindow() {
+  const enrollment = new EnrollmentBridge();
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -18,10 +21,40 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
+      preload: path.join(__dirname, "preload.cjs"),
     },
   });
 
+  const builtUrl = pathToFileURL(path.join(__dirname, "../apps/web/dist/index.html")).href;
+  function trusted(event) {
+    return event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame &&
+      (isDevelopment ? event.senderFrame.url === DEV_URL + "/" : event.senderFrame.url === builtUrl);
+  }
+  for (const command of ["register", "complete", "cancel"]) {
+    ipcMain.handle(`enrollment:${command}`, (event, data) => {
+      if (!trusted(event)) throw new Error("Untrusted enrollment request");
+      if (command === "cancel") {
+        enrollment.stop();
+        return;
+      }
+      if (command === "register" && (!data || typeof data !== "object" ||
+          typeof data.displayName !== "string" || data.displayName.length > 100 ||
+          typeof data.deviceId !== "string" || data.deviceId.length > 36 ||
+          typeof data.fingerSlot !== "string" || data.fingerSlot.length > 20)) {
+        return { error: "VALIDATION_ERROR", retryable: false };
+      }
+      return enrollment.call(command, command === "register" ? {
+        displayName: data.displayName, deviceId: data.deviceId, fingerSlot: data.fingerSlot,
+      } : undefined);
+    });
+  }
+  window.on("closed", () => {
+    enrollment.stop();
+    for (const command of ["register", "complete", "cancel"]) ipcMain.removeHandler(`enrollment:${command}`);
+  });
+
   window.setMenuBarVisibility(false);
+  window.webContents.on("did-start-loading", () => enrollment.stop());
 
   window.once("ready-to-show", () => {
     window.show();
