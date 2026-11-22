@@ -28,6 +28,10 @@ else:
     import fcntl
 
 
+# Win32 CreateFile flag, also needed with pywin32 builds that omit it.
+_FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
+
+
 class JsonVaultStorage:
     """Persist one encrypted vault, refusing unsafe files and stale updates."""
 
@@ -107,7 +111,7 @@ class JsonVaultStorage:
                 win32con.FILE_SHARE_READ | win32con.FILE_SHARE_WRITE | win32con.FILE_SHARE_DELETE,
                 None,
                 win32con.OPEN_ALWAYS if for_lock else win32con.OPEN_EXISTING,
-                win32con.FILE_FLAG_OPEN_REPARSE_POINT,
+                _FILE_FLAG_OPEN_REPARSE_POINT,
                 None,
             )
             try:
