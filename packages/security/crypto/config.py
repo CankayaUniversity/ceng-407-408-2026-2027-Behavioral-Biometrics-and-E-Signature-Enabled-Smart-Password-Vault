@@ -45,7 +45,9 @@ class Argon2Config:
     def from_dict(cls, data: dict[str, Any]) -> "Argon2Config":
         if not isinstance(data, dict):
             raise TypeError("Argon2 configuration must be an object")
-        expected = {"memory_cost_kib", "time_cost", "parallelism", "key_length"}
-        if set(data) != expected:
+
+        required = {"memory_cost_kib", "time_cost", "parallelism"}
+        if set(data) not in (required, required | {"key_length"}):
             raise ValueError("Invalid Argon2 configuration fields")
+
         return cls(**data)
