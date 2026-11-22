@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID, uuid4
 
+from contracts.vault_service import (CredentialCreate, CredentialUpdate, CredentialItem, CredentialSummary)
+from packages.security.vault.credential import (encrypt_credential, decrypt_credential, CredentialFormatError)
+
 from packages.security.crypto.aead import decrypt, encrypt
 from packages.security.crypto.config import AES_GCM_KEY_LENGTH, Argon2Config
 from packages.security.crypto.exceptions import DecryptionError
@@ -19,6 +22,7 @@ class VaultStorage(Protocol):
 
     def create(self, vault: dict) -> None: ...
     def read(self) -> dict: ...
+    def update(self, expected: dict, vault: dict) -> None: ...
 
 
 class VaultLockedError(RuntimeError):
@@ -81,7 +85,7 @@ class VaultKdfLimits:
 
 
 class VaultService:
-    """Orchestrates envelope encryption; no credential CRUD in VLT-02."""
+    """Encrypted vault lifecycle and credential operations."""
 
     def __init__(
         self,
@@ -97,6 +101,7 @@ class VaultService:
         self._kdf_limits = kdf_limits if kdf_limits is not None else VaultKdfLimits()
         self._kdf_limits.validate(self._config)
         self._dek: bytes | None = None
+        self._header: dict | None = None
 
     def create_vault(self, master_password: str) -> UUID:
         self.lock_vault()
@@ -159,10 +164,83 @@ class VaultService:
                 raise
             raise VaultFormatError("Invalid vault metadata") from exc
         self._dek = dek
+        self._header = {k: vault[k] for k in ("format_version", "vault_id", "kdf", "key_envelope")}
 
     def lock_vault(self) -> None:
         """Best-effort key reference cleanup; Python cannot guarantee zeroization."""
         self._dek = None
+        self._header = None
+
+    def _load_records(self) -> tuple[dict, UUID, list[CredentialItem]]:
+        if self._dek is None or self._header is None:
+            raise VaultLockedError("Vault must be unlocked")
+        try:
+            # Read and validate while the fail-closed guard is active.
+            vault = self._storage.read()
+            if not isinstance(vault, dict) or set(vault) != {*self._header, "records"}:
+                raise VaultFormatError("Invalid vault structure")
+            if any(vault[k] != value for k, value in self._header.items()):
+                raise VaultFormatError("Vault identity or key envelope changed")
+            if not isinstance(vault["records"], list):
+                raise VaultFormatError("Invalid records")
+            vault_id = UUID(self._header["vault_id"])
+            items: list[CredentialItem] = []
+            seen: set[UUID] = set()
+            for record in vault["records"]:
+                item = decrypt_credential(self._dek, vault_id, record)
+                if item.record_id in seen:
+                    raise VaultFormatError("Duplicate record ID")
+                seen.add(item.record_id)
+                items.append(item)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, UnicodeError, DecryptionError):
+            # Includes malformed JSON, invalid AEAD lengths, and storage read failures.
+            # Never leave an unlocked DEK available after integrity/read failure.
+            self.lock_vault()
+            raise
+        return vault, vault_id, items
+
+    def add_credential(self, data: CredentialCreate) -> UUID:
+        vault, vault_id, _ = self._load_records()
+        record_id = uuid4()
+        record = encrypt_credential(self._dek, vault_id, record_id, data)
+        updated = {**vault, "records": [*vault["records"], record]}
+        self._storage.update(vault, updated)
+        return record_id
+
+    def get_credential(self, record_id: UUID) -> CredentialItem:
+        _, _, items = self._load_records()
+        for item in items:
+            if item.record_id == record_id:
+                return item
+        raise KeyError("Credential not found")
+
+    def update_credential(self, record_id: UUID, data: CredentialUpdate) -> None:
+        vault, vault_id, items = self._load_records()
+        if not any(item.record_id == record_id for item in items):
+            raise KeyError("Credential not found")
+        replacement = encrypt_credential(self._dek, vault_id, record_id, data)
+        updated = {**vault, "records": [
+            replacement if UUID(record["record_id"]) == record_id else record
+            for record in vault["records"]
+        ]}
+        self._storage.update(vault, updated)
+
+    def delete_credential(self, record_id: UUID) -> None:
+        vault, _, items = self._load_records()
+        if not any(item.record_id == record_id for item in items):
+            raise KeyError("Credential not found")
+        updated = {**vault, "records": [
+            record for record in vault["records"]
+            if UUID(record["record_id"]) != record_id
+        ]}
+        self._storage.update(vault, updated)
+
+    def list_credentials(self) -> list[CredentialSummary]:
+        _, _, items = self._load_records()
+        return [CredentialSummary(
+            record_id=item.record_id, title=item.title,
+            username=item.username, url=item.url,
+        ) for item in items]
 
     @property
     def is_unlocked(self) -> bool:
