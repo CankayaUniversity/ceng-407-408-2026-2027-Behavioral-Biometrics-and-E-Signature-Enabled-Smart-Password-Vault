@@ -16,9 +16,15 @@ def test_aes_gcm_sizes() -> None:
     assert (AES_GCM_KEY_LENGTH, AES_GCM_NONCE_LENGTH, AES_GCM_TAG_LENGTH) == (32, 12, 16)
 
 
-def test_config_round_trip() -> None:
-    config = Argon2Config(memory_cost_kib=64, time_cost=1, parallelism=1)
+@pytest.mark.parametrize("key_length", [32, 64])
+def test_config_round_trip(key_length: int) -> None:
+    config = Argon2Config(memory_cost_kib=64, time_cost=1, parallelism=1, key_length=key_length)
     assert Argon2Config.from_dict(config.to_dict()) == config
+
+
+def test_config_from_cost_parameters_uses_default_key_length() -> None:
+    data = {"memory_cost_kib": 64, "time_cost": 1, "parallelism": 1}
+    assert Argon2Config.from_dict(data) == Argon2Config(**data, key_length=32)
 
 
 def test_config_is_immutable() -> None:
