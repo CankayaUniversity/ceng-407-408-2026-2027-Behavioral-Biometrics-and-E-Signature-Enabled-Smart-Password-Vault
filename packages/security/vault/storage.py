@@ -59,6 +59,14 @@ class JsonVaultStorage:
                 | win32security.PROTECTED_DACL_SECURITY_INFORMATION,
                 None, None, acl, None,
             )
+            # The default token owner can be a group. Apply the DACL first
+            # so the user has WRITE_OWNER when assigning their own SID.
+            win32security.SetNamedSecurityInfo(
+                str(path),
+                win32security.SE_FILE_OBJECT,
+                win32security.OWNER_SECURITY_INFORMATION,
+                owner, None, None, None,
+            )
         else:
             os.chmod(path, 0o600)
 
