@@ -1,9 +1,11 @@
 from base64 import b64decode, urlsafe_b64encode
 from binascii import Error as Base64Error
 from datetime import datetime, timezone
+from hashlib import sha256
+from secrets import token_urlsafe
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
@@ -13,7 +15,7 @@ from packages.device_protocol.protocol.signing import DeviceSigner
 
 from ..database.connection import SessionLocal
 from ..models import AuthChallenge, Device, Session
-from ..schemas.auth import AuthVerifyRequest, AuthVerifyResponse
+from ..schemas.auth import AuthLoginResponse, AuthVerifyRequest
 from ..schemas.session import SessionResponse
 
 
@@ -50,13 +52,18 @@ def decode_base64url(value: str, *, size: int) -> bytes:
     return decoded
 
 
-@router.post("/verify", response_model=AuthVerifyResponse)
-def verify_device_response(request: AuthVerifyRequest):
+@router.post("/verify", response_model=AuthLoginResponse)
+def verify_device_response(
+    request: AuthVerifyRequest,
+    http_response: Response,
+):
     try:
         with SessionLocal.begin() as db:
             challenge = db.get(AuthChallenge, request.challenge_id)
             if challenge is None:
-                return error_response(400, "INVALID_CHALLENGE", "Unknown challenge.")
+                return error_response(
+                    400, "INVALID_CHALLENGE", "Unknown challenge."
+                )
 
             payload = request.payload
             if request.device_id != challenge.device_id:
@@ -70,7 +77,9 @@ def verify_device_response(request: AuthVerifyRequest):
                 or payload.nonce != challenge.nonce
                 or challenge.purpose != "login"
             ):
-                return error_response(401, "REQUEST_MISMATCH", "Challenge context mismatch.")
+                return error_response(
+                    401, "REQUEST_MISMATCH", "Challenge context mismatch."
+                )
 
             device = db.get(Device, challenge.device_id)
             if (
@@ -87,7 +96,9 @@ def verify_device_response(request: AuthVerifyRequest):
                 )
                 signature = decode_base64url(request.signature, size=64)
             except (ValueError, Base64Error):
-                return error_response(401, "INVALID_SIGNATURE", "Device authentication failed.")
+                return error_response(
+                    401, "INVALID_SIGNATURE", "Device authentication failed."
+                )
 
             message = build_signed_message(
                 version=request.version,
@@ -96,15 +107,23 @@ def verify_device_response(request: AuthVerifyRequest):
                 payload=payload.model_dump(),
             )
             if not DeviceSigner.verify(public_key, message, signature):
-                return error_response(401, "INVALID_SIGNATURE", "Device authentication failed.")
+                return error_response(
+                    401, "INVALID_SIGNATURE", "Device authentication failed."
+                )
 
             now = datetime.now(timezone.utc)
             if challenge.consumed_at is not None:
-                return error_response(409, "REPLAY_DETECTED", "Challenge is no longer available.")
+                return error_response(
+                    409, "REPLAY_DETECTED", "Challenge is no longer available."
+                )
             if challenge.expires_at <= now:
-                return error_response(401, "EXPIRED_CHALLENGE", "Challenge has expired.")
+                return error_response(
+                    401, "EXPIRED_CHALLENGE", "Challenge has expired."
+                )
             if not payload.verified:
-                return error_response(401, "VERIFICATION_FAILED", "Device verification failed.")
+                return error_response(
+                    401, "VERIFICATION_FAILED", "Device verification failed."
+                )
 
             eligible_device = (
                 select(Device.device_id)
@@ -131,6 +150,9 @@ def verify_device_response(request: AuthVerifyRequest):
             if consumed.rowcount != 1:
                 raise VerificationConflict
 
+            access_token = token_urlsafe(32)
+            access_token_hash = sha256(access_token.encode("ascii")).hexdigest()
+
             session = db.get(Session, challenge.session_id)
             promoted = db.execute(
                 update(Session)
@@ -141,19 +163,30 @@ def verify_device_response(request: AuthVerifyRequest):
                     Session.expires_at > now,
                     Session.revoked_at.is_(None),
                 )
-                .values(state="TRUSTED")
+                .values(
+                    state="TRUSTED",
+                    access_token_hash=access_token_hash,
+                )
             )
             if promoted.rowcount != 1 or session is None:
                 raise VerificationConflict
 
             db.refresh(session)
-            result = AuthVerifyResponse(
-                session=SessionResponse.model_validate(session, from_attributes=True)
+            result = AuthLoginResponse(
+                session=SessionResponse.model_validate(
+                    session, from_attributes=True
+                ),
+                access_token=access_token,
             )
 
     except VerificationConflict:
-        return error_response(409, "VERIFICATION_CONFLICT", "Authentication state changed.")
+        return error_response(
+            409, "VERIFICATION_CONFLICT", "Authentication state changed."
+        )
     except SQLAlchemyError:
-        return error_response(500, "INTERNAL_ERROR", "Unable to verify device response.")
+        return error_response(
+            500, "INTERNAL_ERROR", "Unable to verify device response."
+        )
 
+    http_response.headers["Cache-Control"] = "no-store"
     return result

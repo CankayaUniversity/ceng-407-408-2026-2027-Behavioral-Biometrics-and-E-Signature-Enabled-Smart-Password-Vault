@@ -16,11 +16,13 @@ from services.backend.app import main as backend
 from services.backend.app.api import challenges, devices, users, verification
 from services.backend.app.database.base import Base
 from services.backend.app.models import AuthChallenge, PairingCode, Session
+from services.backend.app.api import sessions
 from services.backend.app.session_service import (
     get_session_for_user,
     revoke_session_for_user,
 )
-
+from hashlib import sha256
+from secrets import token_urlsafe
 
 @pytest.fixture
 def pairing_api(tmp_path, monkeypatch):
@@ -34,6 +36,7 @@ def pairing_api(tmp_path, monkeypatch):
     monkeypatch.setattr(devices, "SessionLocal", session_factory)
     monkeypatch.setattr(challenges, "SessionLocal", session_factory)
     monkeypatch.setattr(verification, "SessionLocal", session_factory)
+    monkeypatch.setattr(sessions, "SessionLocal", session_factory)
 
     with TestClient(backend.app) as client:
         yield client, session_factory
@@ -389,3 +392,88 @@ def test_signed_login_rejects_mismatched_challenge_context(signed_login):
         assert session is not None
         assert challenge.consumed_at is None
         assert session.state == "AUTH_PENDING"
+
+def test_session_controls_require_a_valid_token(signed_login):
+    client, _, session_id, signed_response = signed_login
+
+    login = client.post("/v1/auth/verify", json=signed_response)
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    session_url = f"/v1/sessions/{session_id}"
+
+    # Knowing the session ID alone permits neither operation.
+    assert client.get(session_url).status_code == 401
+    assert client.post(f"{session_url}/revoke").status_code == 401
+
+    invalid_headers = {"Authorization": "Bearer invalid-token"}
+    assert client.get(session_url, headers=invalid_headers).status_code == 401
+    assert (
+        client.post(f"{session_url}/revoke", headers=invalid_headers).status_code
+        == 401
+    )
+
+    status = client.get(session_url, headers=headers)
+    assert status.status_code == 200
+    assert status.json()["session_id"] == session_id
+    assert status.json()["state"] == "TRUSTED"
+
+    revoked = client.post(f"{session_url}/revoke", headers=headers)
+    assert revoked.status_code == 200
+    assert revoked.json()["state"] == "REVOKED"
+
+    assert client.get(session_url, headers=headers).status_code == 401
+    assert client.post(f"{session_url}/revoke", headers=headers).status_code == 401
+
+
+def test_expired_session_rejects_its_token(signed_login):
+    client, session_factory, session_id, signed_response = signed_login
+
+    login = client.post("/v1/auth/verify", json=signed_response)
+    assert login.status_code == 200
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    with session_factory.begin() as db:
+        session = db.get(Session, session_id)
+        assert session is not None
+        session.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+
+    session_url = f"/v1/sessions/{session_id}"
+    assert client.get(session_url, headers=headers).status_code == 401
+    assert client.post(f"{session_url}/revoke", headers=headers).status_code == 401
+
+    with session_factory() as db:
+        session = db.get(Session, session_id)
+        assert session is not None
+        assert session.state == "EXPIRED"
+
+def test_session_token_cannot_access_another_users_session(
+    signed_login, pending_login
+):
+    client, session_factory, source_id, signed_response = signed_login
+    _, _, _, target_id, _ = pending_login
+
+    login = client.post("/v1/auth/verify", json=signed_response)
+    assert login.status_code == 200
+    source_headers = {
+        "Authorization": f"Bearer {login.json()['access_token']}"
+    }
+
+    target_token = token_urlsafe(32)
+    with session_factory.begin() as db:
+        target = db.get(Session, target_id)
+        assert target is not None
+        target.state = "TRUSTED"
+        target.access_token_hash = sha256(target_token.encode("ascii")).hexdigest()
+
+    source_url = f"/v1/sessions/{source_id}"
+    target_url = f"/v1/sessions/{target_id}"
+    target_headers = {"Authorization": f"Bearer {target_token}"}
+
+    assert client.get(source_url, headers=source_headers).status_code == 200
+    assert client.get(target_url, headers=source_headers).status_code == 401
+    assert client.post(f"{target_url}/revoke", headers=source_headers).status_code == 401
+
+    target_status = client.get(target_url, headers=target_headers)
+    assert target_status.status_code == 200
+    assert target_status.json()["state"] == "TRUSTED"

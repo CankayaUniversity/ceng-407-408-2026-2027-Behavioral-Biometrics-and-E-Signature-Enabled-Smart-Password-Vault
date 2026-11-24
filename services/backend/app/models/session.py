@@ -31,6 +31,10 @@ class Session(Base):
     expires_at: Mapped[datetime] = mapped_column(
         UTCDateTime(),
     )
+    access_token_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
     revoked_at: Mapped[datetime | None] = mapped_column(
         UTCDateTime(),
         nullable=True,
