@@ -4,6 +4,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session as DatabaseSession
 
 from .models import AuthChallenge, Session
+from .audit_service import record_security_event
 
 
 INITIAL_SESSION_TTL = timedelta(minutes=15)
@@ -55,6 +56,13 @@ def _expire_session(
     )
     if result.rowcount == 1:
         _invalidate_challenges(db, session_id=session_id, now=now)
+        record_security_event(
+            db,
+            event_type="SESSION_EXPIRED",
+            severity="INFO",
+            reason_code="SESSION_DEADLINE_REACHED",
+            session_id=session_id,
+        )
 
 
 def _load_session(
@@ -96,5 +104,13 @@ def revoke_session_for_user(
     )
     if result.rowcount == 1:
         _invalidate_challenges(db, session_id=session_id, now=now)
+        record_security_event(
+            db,
+            event_type="SESSION_REVOKED",
+            severity="INFO",
+            reason_code="OWNER_REVOKED_SESSION",
+            session_id=session_id,
+            actor_user_id=owner_id,
+        )
 
     return _load_session(db, session_id=session_id, owner_id=owner_id)

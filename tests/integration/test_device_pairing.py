@@ -23,6 +23,8 @@ from services.backend.app.session_service import (
 )
 from hashlib import sha256
 from secrets import token_urlsafe
+from sqlalchemy import select
+from services.backend.app.models.security_event import SecurityEvent
 
 @pytest.fixture
 def pairing_api(tmp_path, monkeypatch):
@@ -70,7 +72,7 @@ def assert_unauthorized(response):
 
 
 def test_pairing_code_can_only_be_used_once(pairing_api):
-    client, _ = pairing_api
+    client, session_factory = pairing_api
     registration = register_user(client)
 
     first = pair_device(client, registration)
@@ -80,6 +82,27 @@ def test_pairing_code_can_only_be_used_once(pairing_api):
     assert first.json()["user_id"] == registration["user_id"]
     assert_unauthorized(pair_device(client, registration))
 
+    with session_factory() as db:
+        success = db.scalars(
+            select(SecurityEvent).where(
+                SecurityEvent.event_type == "DEVICE_PAIRING_SUCCEEDED"
+            )
+        ).one()
+        assert success.sanitized_metadata == {
+            "reason_code": "PAIRING_CODE_ACCEPTED",
+            "actor_user_id": registration["user_id"],
+            "device_id": first.json()["device_id"],
+        }
+
+        rejection = db.scalars(
+            select(SecurityEvent).where(
+                SecurityEvent.event_type == "DEVICE_PAIRING_REJECTED"
+            )
+        ).one()
+        assert rejection.session_id is None
+        assert rejection.sanitized_metadata == {
+            "reason_code": "PAIRING_CODE_REJECTED",
+        }
 
 def test_expired_pairing_code_is_rejected(pairing_api):
     client, session_factory = pairing_api
@@ -226,6 +249,15 @@ def test_expiration_takes_priority_over_revocation(pending_login):
         challenge = db.get(AuthChallenge, challenge_id)
         assert challenge is not None
         assert challenge.consumed_at is not None
+        event = db.scalars(
+            select(SecurityEvent).where(
+                SecurityEvent.session_id == session_id,
+                SecurityEvent.event_type == "SESSION_EXPIRED",
+            )
+        ).one()
+        assert event.sanitized_metadata == {
+            "reason_code": "SESSION_DEADLINE_REACHED",
+        }
 
 
 def test_repeated_revocation_preserves_original_timestamp(pending_login):
@@ -251,6 +283,17 @@ def test_repeated_revocation_preserves_original_timestamp(pending_login):
         challenge = db.get(AuthChallenge, challenge_id)
         assert challenge is not None
         assert challenge.consumed_at == first_revoked_at
+
+        event = db.scalars(
+            select(SecurityEvent).where(
+                SecurityEvent.session_id == session_id,
+                SecurityEvent.event_type == "SESSION_REVOKED",
+            )
+        ).one()
+        assert event.sanitized_metadata == {
+            "reason_code": "OWNER_REVOKED_SESSION",
+            "actor_user_id": owner_id,
+        }
 
 
 def test_other_user_cannot_read_or_revoke_session(pending_login):
@@ -334,6 +377,19 @@ def test_signed_login_succeeds_only_once(signed_login):
         challenge = db.get(AuthChallenge, signed_response["challenge_id"])
         assert challenge is not None
         assert challenge.consumed_at is not None
+        event = db.scalars(
+            select(SecurityEvent).where(
+                SecurityEvent.session_id == session_id,
+                SecurityEvent.event_type == "DEVICE_VERIFICATION_SUCCEEDED",
+            )
+        ).one()
+
+        assert event.severity == "INFO"
+        assert event.sanitized_metadata == {
+            "reason_code": "SIGNED_LOGIN_ACCEPTED",
+            "actor_user_id": response.json()["session"]["user_id"],
+            "device_id": signed_response["device_id"],
+        }
 
 
 def test_signed_login_rejects_expired_challenge(signed_login):
@@ -353,6 +409,18 @@ def test_signed_login_rejects_expired_challenge(signed_login):
         session = db.get(Session, session_id)
         assert session is not None
         assert session.state == "AUTH_PENDING"
+        event = db.scalars(
+            select(SecurityEvent).where(
+                SecurityEvent.session_id == session_id,
+            )
+        ).one()
+
+        assert event.event_type == "DEVICE_VERIFICATION_REJECTED"
+        assert event.severity == "WARNING"
+        assert event.sanitized_metadata == {
+            "reason_code": "EXPIRED_CHALLENGE",
+            "device_id": signed_response["device_id"],
+        }
 
 
 def test_signed_login_rejects_tampered_verification_result(signed_login):
@@ -394,7 +462,7 @@ def test_signed_login_rejects_mismatched_challenge_context(signed_login):
         assert session.state == "AUTH_PENDING"
 
 def test_session_controls_require_a_valid_token(signed_login):
-    client, _, session_id, signed_response = signed_login
+    client, session_factory, session_id, signed_response = signed_login
 
     login = client.post("/v1/auth/verify", json=signed_response)
     assert login.status_code == 200
@@ -424,6 +492,20 @@ def test_session_controls_require_a_valid_token(signed_login):
 
     assert client.get(session_url, headers=headers).status_code == 401
     assert client.post(f"{session_url}/revoke", headers=headers).status_code == 401
+
+    with session_factory() as db:
+        rejections = db.scalars(
+            select(SecurityEvent).where(
+                SecurityEvent.event_type == "SESSION_ACCESS_REJECTED",
+            )
+        ).all()
+
+        assert len(rejections) == 6
+        for event in rejections:
+            assert event.session_id is None
+            assert event.sanitized_metadata == {
+                "reason_code": "SESSION_AUTHORIZATION_FAILED",
+            }
 
 
 def test_expired_session_rejects_its_token(signed_login):
@@ -477,3 +559,61 @@ def test_session_token_cannot_access_another_users_session(
     target_status = client.get(target_url, headers=target_headers)
     assert target_status.status_code == 200
     assert target_status.json()["state"] == "TRUSTED"
+
+def test_audit_events_are_visible_only_to_their_owner(signed_login, pending_login):
+    client, session_factory, session_id, signed_response = signed_login
+    _, other_owner_id, _, other_session_id, _ = pending_login
+
+    login = client.post("/v1/auth/verify", json=signed_response)
+    assert login.status_code == 200
+
+    token = login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    audit_url = f"/v1/sessions/{session_id}/audit-events"
+
+    # Create a real session expiration event for the other user.
+    with session_factory.begin() as db:
+        other_session = db.get(Session, other_session_id)
+        assert other_session is not None
+        other_session.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+
+        expired = get_session_for_user(
+            db, session_id=other_session_id, owner_id=other_owner_id
+        )
+        assert expired is not None
+        assert expired.state == "EXPIRED"
+
+    assert client.get(audit_url).status_code == 401
+
+    with session_factory() as db:
+        pairing_events = db.scalars(
+            select(SecurityEvent).where(
+                SecurityEvent.event_type == "DEVICE_PAIRING_SUCCEEDED"
+            )
+        ).all()
+        assert len(pairing_events) == 2
+
+        owner_id = login.json()["session"]["user_id"]
+        own_pairing_id = next(
+            event.event_id
+            for event in pairing_events
+            if event.sanitized_metadata["actor_user_id"] == owner_id
+        )
+
+    response = client.get(audit_url, headers=headers)
+    assert response.status_code == 200
+
+    events = response.json()
+    assert len(events) == 2
+    assert {
+        (event["event_type"], event["session_id"]) for event in events
+    } == {
+        ("DEVICE_PAIRING_SUCCEEDED", None),
+        ("DEVICE_VERIFICATION_SUCCEEDED", session_id),
+    }
+    assert any(event["event_id"] == own_pairing_id for event in events)
+    assert all("sanitized_metadata" not in event for event in events)
+
+    limited = client.get(audit_url, headers=headers, params={"limit": 1})
+    assert limited.status_code == 200
+    assert limited.json() == events[:1]
