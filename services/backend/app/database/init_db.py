@@ -9,12 +9,12 @@ def init_db() -> None:
     with engine.begin() as connection:
         Base.metadata.create_all(bind=connection)
 
-        existing_columns = {
+        challenge_columns = {
             column["name"]
             for column in inspect(connection).get_columns("auth_challenges")
         }
 
-        if "protocol_version" not in existing_columns:
+        if "protocol_version" not in challenge_columns:
             connection.execute(
                 text(
                     "ALTER TABLE auth_challenges "
@@ -22,7 +22,7 @@ def init_db() -> None:
                 )
             )
 
-        if "request_id" not in existing_columns:
+        if "request_id" not in challenge_columns:
             connection.execute(
                 text(
                     "ALTER TABLE auth_challenges "
@@ -30,11 +30,24 @@ def init_db() -> None:
                 )
             )
 
-        if "nonce" not in existing_columns:
+        if "nonce" not in challenge_columns:
             connection.execute(
                 text(
                     "ALTER TABLE auth_challenges "
                     "ADD COLUMN nonce VARCHAR(43)"
+                )
+            )
+
+        session_columns = {
+            column["name"]
+            for column in inspect(connection).get_columns("sessions")
+        }
+
+        if "access_token_hash" not in session_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE sessions "
+                    "ADD COLUMN access_token_hash VARCHAR(64)"
                 )
             )
 

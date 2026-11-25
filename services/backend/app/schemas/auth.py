@@ -79,3 +79,7 @@ class AuthVerifyResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session: SessionResponse
+
+class AuthLoginResponse(AuthVerifyResponse):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"

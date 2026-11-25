@@ -364,3 +364,23 @@ transition guards, expiration, and reauthentication rules are defined in
 This policy is pending team review.
 Session state changes are backend-controlled.
 TRUSTED alone does not unlock the encrypted vault.
+
+## BE-09: Desktop Session and Vault Authorization
+
+Status: Proposal for Desktop and Security review.
+
+- After successful signed login, the backend returns a session ID and a
+  Bearer token. The trusted desktop process keeps the token in memory
+  and uses it for session status and revocation requests.
+- The renderer can request a vault operation through IPC. The trusted
+  desktop process uses its own session context and does not accept
+  renderer-provided tokens, session IDs, or authorization flags.
+- Before a credential operation, the vault adapter must obtain a backend
+  decision for the current session. The session must be TRUSTED and
+  eligible under the reviewed device policy. The vault must also be
+  unlocked separately.
+- If the backend is unavailable or authorization fails, the adapter
+  denies the operation. Session authorization does not supply a vault
+  password or decryption key.
+- PENDING devices remain ineligible for vault access until the team
+  defines and approves the enrollment completion rule.
