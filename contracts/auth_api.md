@@ -384,3 +384,17 @@ Status: Proposal for Desktop and Security review.
   password or decryption key.
 - PENDING devices remain ineligible for vault access until the team
   defines and approves the enrollment completion rule.
+
+## Authentication Audit Events
+
+`GET /v1/sessions/{session_id}/audit-events` requires the Bearer token
+for a TRUSTED session. The response includes the caller's session events
+and successful device pairings. Unattributed rejection events are omitted.
+
+Results are ordered newest first. `limit` defaults to 50 and accepts
+values from 1 to 100. The response exposes event identifiers, type,
+severity, timestamp, and reason code.
+
+For the demo, propose retaining audit events for 30 days. Confirm this
+period with the team before enabling automatic deletion. The API does
+not currently delete records automatically.
