@@ -141,3 +141,11 @@ profiles, evaluation reports, or virtual environments. Use synthetic data in tes
 - `inference/`: user verification.
 - `evaluation/`: scoring, metrics, calibration, reporting, and command-line evaluation.
 - `tests/`: behavioral AI tests.
+
+## AI-05 integration
+
+The desktop now has an explicitly labeled synthetic timing playback panel under
+Security Status. Shared runtime enrollment/verification and a KeyRecs free-text
+adapter are available. Live authenticated monitoring awaits APP-03. See
+[setup, dataset findings, lifecycle and limits](../../docs/ai-05-realtime-verification.md)
+and the [versioned result contract](../../contracts/behavioral_verification.md).

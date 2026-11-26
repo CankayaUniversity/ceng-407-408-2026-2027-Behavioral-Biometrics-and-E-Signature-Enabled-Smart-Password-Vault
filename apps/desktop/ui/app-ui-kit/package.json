@@ -11,7 +11,9 @@
     "format": "turbo format",
     "typecheck": "turbo typecheck",
     "desktop:dev": "electron electron/main.cjs --dev",
-    "desktop:start": "electron electron/main.cjs"
+    "desktop:start": "electron electron/main.cjs",
+    "test:behavior": "node --test tests/behavior.test.mjs",
+    "test:behavior:desktop": "node tests/behavior.smoke.mjs"
   },
   "devDependencies": {
     "electron": "45.3.2",

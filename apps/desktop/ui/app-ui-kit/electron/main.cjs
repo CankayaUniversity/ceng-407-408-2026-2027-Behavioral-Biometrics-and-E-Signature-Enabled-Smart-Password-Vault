@@ -1,5 +1,6 @@
 const path = require("node:path");
 const { app, BrowserWindow, ipcMain } = require("electron");
+const { BehaviorBridge } = require("./behavior.cjs");
 const { EnrollmentBridge } = require("./enrollment.cjs");
 const { pathToFileURL } = require("node:url");
 
@@ -8,6 +9,7 @@ const isDevelopment = !app.isPackaged && process.argv.includes("--dev");
 
 function createWindow() {
   const enrollment = new EnrollmentBridge();
+  const behavior = new BehaviorBridge(path.join(app.getPath("userData"), "behavioral-demo-profiles"));
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -48,13 +50,29 @@ function createWindow() {
       } : undefined);
     });
   }
+  for (const command of ["play", "pause", "logout", "delete"]) {
+    ipcMain.handle(`behavior:${command}`, (event, data) => {
+      if (!trusted(event)) throw new Error("Untrusted behavior request");
+      if (command === "play") {
+        if (!data || data.consent !== true ||
+            !["enroll-1", "enroll-2", "genuine", "impostor"].includes(data.action)) {
+          behavior.stop("consent_required");
+          return { status: "consent_required" };
+        }
+        return behavior.call(command, { consent: true, action: data.action });
+      }
+      return behavior.call(command);
+    });
+  }
   window.on("closed", () => {
     enrollment.stop();
+    behavior.stop();
+    for (const command of ["play", "pause", "logout", "delete"]) ipcMain.removeHandler(`behavior:${command}`);
     for (const command of ["register", "complete", "cancel"]) ipcMain.removeHandler(`enrollment:${command}`);
   });
 
   window.setMenuBarVisibility(false);
-  window.webContents.on("did-start-loading", () => enrollment.stop());
+  window.webContents.on("did-start-loading", () => { enrollment.stop(); behavior.stop(); });
 
   window.once("ready-to-show", () => {
     window.show();

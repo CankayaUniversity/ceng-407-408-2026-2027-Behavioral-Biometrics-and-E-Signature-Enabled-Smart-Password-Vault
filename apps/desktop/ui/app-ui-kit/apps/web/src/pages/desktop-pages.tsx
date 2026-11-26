@@ -1,3 +1,4 @@
+import { BehaviorPage } from "./behavior-page"
 import { Button } from "@workspace/ui/components/button"
 import { Badge } from "@workspace/ui/components/badge"
 import {
@@ -100,6 +101,7 @@ export function DashboardPage() {
 export function SecurityStatusPage() {
   return (
     <div className="space-y-6">
+      <BehaviorPage />
       <Card>
         <CardHeader>
           <CardTitle>
