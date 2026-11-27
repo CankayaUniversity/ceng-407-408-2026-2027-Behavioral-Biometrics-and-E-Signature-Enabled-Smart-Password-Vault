@@ -27,3 +27,10 @@ dist/
 /backend.db-journal
 /backend.db-wal
 /backend.db-shm
+# Local behavioral datasets and generated profiles/models
+/dataset/
+/datasets/
+/behavioral-demo-profiles/
+/behavioral-profiles/
+*.joblib
+*.pkl

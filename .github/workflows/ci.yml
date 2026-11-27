@@ -71,3 +71,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Behavioral Python bridge tests
+        run: npm run test:behavior

@@ -178,3 +178,14 @@ python -m pytest tests/integration/test_desktop_enrollment.py tests/integration/
 These tests use disposable databases and cover real registration/pairing, input
 validation, duplicate ownership, expiration, simulator rejection, safe retry,
 key stability, secret redaction and uncertain-write handling.
+
+
+## Behavioral verification playback (AI-05)
+
+Open Security Status in the built Electron app for consented deterministic
+synthetic enrollment and verification. This is a demonstration and does not
+authenticate a user or unlock a vault. See [AI-05 setup and limitations](../../docs/ai-05-realtime-verification.md).
+
+From `ui/app-ui-kit`, run `npm run test:behavior` for the real Python bridge
+and `npm run test:behavior:desktop` after building for the isolated Electron
+smoke test. No public datasets are needed for these tests.
